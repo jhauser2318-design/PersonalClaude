@@ -1,0 +1,21 @@
+"""Reads settings from the .env file in the project folder.
+
+Nothing secret is ever sent to the browser: the API key is only used by the
+backend when it talks to Anthropic.
+"""
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(PROJECT_ROOT / ".env")
+
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-5").strip() or "claude-opus-5"
+DATABASE_PATH = PROJECT_ROOT / os.getenv("DATABASE_PATH", "data/life.db")
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+
+
+def api_key_configured() -> bool:
+    return bool(ANTHROPIC_API_KEY) and "your-key-goes-here" not in ANTHROPIC_API_KEY

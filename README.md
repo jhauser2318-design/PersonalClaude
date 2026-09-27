@@ -14,98 +14,78 @@ The sidebar already has spots for **Calendar, Finances, Email and Follow-ups**. 
 
 ---
 
-## Setup, step by step (Windows)
+## Quick start (Windows)
 
-You only do steps 1–3 once.
+You do this **once**. After that you just double-click the **Life Control Center** icon on your Desktop.
 
-### Step 1: Install Python
-
-Python is the programming language the app's "backend" (the part that runs behind the scenes) is written in.
-
-1. Go to **https://www.python.org/downloads/** and click the big yellow **Download Python 3.x** button.
-2. Open the downloaded file.
-3. ⚠️ **Important:** on the first screen, tick the box **"Add python.exe to PATH"** at the bottom. Then click **Install Now**.
-4. When it says "Setup was successful", click **Close**.
-
-**Check that it worked.** Press the **Windows key**, type `powershell`, and press **Enter**. In the blue or black window that opens, type the following and press **Enter**:
-
-```
-py --version
-```
-
-You should see something like `Python 3.13.1`. Any version from **3.10** upward is fine.
-
-> **Mac:** install from the same website (or run `brew install python`), then use `python3 --version` to check.
-
-### Step 2: Download this project
-
-- **Easiest:** on this project's GitHub page, click the green **Code** button, then **Download ZIP**. Right-click the downloaded ZIP, choose **Extract All…**, and pick a place you'll remember, such as `Documents\LifeControlCenter`.
-- **If you use Git:** `git clone <this repository's URL>`
-
-### Step 3: Get an Anthropic API key and put it in a `.env` file
+### 1. Get your Anthropic API key (so it's ready to paste)
 
 The command bar uses Claude through Anthropic's API. An **API key** is like a password that lets the app use your Anthropic account.
 
 1. Go to **https://console.anthropic.com** and sign up or log in.
-2. Open **Billing** (under Settings) and add a small amount of credit. The API is pay-as-you-go, and each command-bar sentence is one small request.
-3. Open **API Keys** and click **Create Key**. Give it a name such as `life-control-center`.
-4. **Copy the key right away.** It starts with `sk-ant-` and is shown only once.
+2. Open **Settings → Billing** and add a small amount of credit. The API is pay-as-you-go, and each command-bar sentence is one small request.
+3. Open **Settings → API Keys** and click **Create Key**. Name it `life-control-center`.
+4. **Copy the key** (it starts with `sk-ant-`). It's shown only once, so keep the page open until step 3 below.
 
-Now put the key where the app can find it:
+### 2. Download the app
 
-1. Open the project folder in File Explorer.
-2. Find the file **`.env.example`**. Make a copy of it, and rename the copy to exactly **`.env`** (a dot, then `env`, with nothing before or after).
-   - Tip: if you can't see file endings, click **View → Show → File name extensions** in File Explorer.
-   - Windows may warn about changing the file name extension. Click **Yes**.
-   - Or skip this: `start.bat` (step 4) creates the `.env` file for you the first time you run it.
-3. Right-click **`.env`** → **Open with** → **Notepad**.
-4. Replace `sk-ant-your-key-goes-here` with your real key, so the line looks like:
-   ```
-   ANTHROPIC_API_KEY=sk-ant-api03-abc123...
-   ```
-   No quotes and no spaces. Save the file (**Ctrl+S**).
+While logged in to GitHub, click this link:
 
-> 🔒 **Your key stays private.** The `.env` file is listed in `.gitignore`, so Git will never upload it to GitHub. The key is used only by the backend on your computer, and your browser never sees it. Never paste your key into `.env.example`, into chat messages, or anywhere public.
+### 👉 [Download Life Control Center (ZIP)](https://github.com/jhauser2318-design/PersonalClaude/archive/refs/heads/main.zip)
 
-### Step 4: Start the app
+When it has downloaded, open your **Downloads** folder, right-click the ZIP, and choose **Extract All… → Extract**.
 
-**Double-click `start.bat`** in the project folder.
+### 3. Double-click `INSTALL.bat`
 
-- The first time, it spends a minute or two setting up a private Python environment (a folder called `.venv`) and installing the packages the app needs. Later starts take a few seconds.
-- If Windows shows **"Windows protected your PC"**, click **More info** → **Run anyway**. This appears because the file was downloaded from the internet.
-- A black window stays open while the app runs. **Keep it open.** Closing it stops the app.
+It's in the folder you just extracted. The installer:
+
+- finds Python on your computer, and **installs it for you if it's missing**
+- copies the app to **`C:\Users\<your name>\LifeControlCenter`**
+- installs everything the app needs (the first time takes a minute or two)
+- asks you to **paste your API key**: right-click in the window (or press Ctrl+V), then press **Enter**
+- puts a **Life Control Center** icon on your **Desktop** and in the **Start menu**
+- opens the app in your browser
+
+If Windows shows **"Windows protected your PC"**, click **More info → Run anyway**. This appears because the file came from the internet.
+
+After this, you can delete the ZIP and the extracted folder. The app lives in `C:\Users\<your name>\LifeControlCenter`.
+
+### Every day after that
+
+**Double-click the Life Control Center icon on your Desktop.** Your browser opens the app at **http://localhost:8000**.
+
+- A small window labelled *Life Control Center* waits in the taskbar while the app runs. **Closing that window stops the app.**
+- Clicking the icon again while the app is running just opens the browser tab.
+- You can bookmark http://localhost:8000. It works whenever the app is running. (`localhost` means "this computer": the app isn't on the internet, and nobody else can see it.)
+
+### Updating to a newer version later
+
+Download the ZIP again, extract it, and double-click `INSTALL.bat`. Your goals, tasks and API key are kept.
 
 <details>
-<summary>Prefer typing the commands yourself? (Windows PowerShell)</summary>
+<summary>Setting it up by hand instead (Windows PowerShell)</summary>
+
+1. Install Python from https://www.python.org/downloads/. On the first screen, tick **"Add python.exe to PATH"**.
+2. Copy `.env.example` to a new file named `.env`, open it in Notepad, and paste your key after `ANTHROPIC_API_KEY=`.
+3. In PowerShell, in the project folder:
 
 ```powershell
-cd $HOME\Documents\LifeControlCenter      # wherever you put the project
-py -m venv .venv                           # one time only
+py -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt            # one time only (and after updates)
+pip install -r requirements.txt
 python -m uvicorn backend.main:app --port 8000
 ```
 
-If PowerShell says running scripts is disabled, run this once and try again:
-`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+Then open http://localhost:8000. If PowerShell says running scripts is disabled, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
 </details>
 
 <details>
 <summary>Mac / Linux</summary>
 
-Open Terminal in the project folder and run `./start.sh`, then open the address below.
+Install Python 3.10 or newer, copy `.env.example` to `.env` and add your key, then open Terminal in the project folder, run `./start.sh`, and open http://localhost:8000.
 </details>
 
-### Step 5: Open it in your browser
-
-The browser should open automatically. If it doesn't, open Chrome, Edge, Firefox, or Safari and go to:
-
-### 👉 http://localhost:8000
-
-(`localhost` means "this computer". The app isn't on the internet, and no one else can see it.)
-
-**To stop the app:** click the black window and press **Ctrl+C**, or just close the window.
-**To start it again later:** double-click `start.bat` again.
+> 🔒 **Your key stays private.** It's saved only in the `.env` file on your computer. `.env` is listed in `.gitignore`, so it's never uploaded to GitHub, and your browser never sees it.
 
 ---
 
@@ -142,7 +122,7 @@ The first time you start the app, it adds one example goal per life area plus a 
 
 ## Your data and privacy
 
-- Everything is saved in one file on your computer: **`data/life.db`** (a SQLite database).
+- Everything is saved in one file on your computer: **`C:\Users\<you>\LifeControlCenter\data\life.db`** (a SQLite database).
   **To back it up**, stop the app and copy that file somewhere safe.
 - `data/*.db` is in `.gitignore`, so your personal data won't be uploaded to GitHub either.
 - When you use the **command bar**, the backend sends Anthropic your sentence plus a short list of your goals and tasks (titles, areas, dates, progress), so Claude can work out what you mean. Clicking around the app doesn't send anything anywhere.
@@ -154,12 +134,12 @@ The first time you start the app, it adds one example goal per life area plus a 
 
 | Problem | Fix |
 |---|---|
-| `'py' is not recognized` / `Python was not found` | Python isn't installed, or "Add to PATH" wasn't ticked. Re-run the Python installer, choose **Modify**, and make sure it's added to PATH. Then close and reopen PowerShell. |
-| Yellow banner: *"The command bar needs an Anthropic API key"* | Check that the file is named exactly `.env` (not `.env.txt`), the key is on the `ANTHROPIC_API_KEY=` line, and then **restart the app**. |
+| Installer says Python can't be found | Restart your computer and double-click `INSTALL.bat` again. If that fails, install Python from python.org (tick **"Add python.exe to PATH"**) and run `INSTALL.bat` again. |
+| Yellow banner: *"The command bar needs an Anthropic API key"* | Run `INSTALL.bat` again and paste your key, or open `C:\Users\<you>\LifeControlCenter\.env` in Notepad and put it after `ANTHROPIC_API_KEY=`. Then close the app's window and start it again. |
 | *"Anthropic rejected the API key"* | The key was mistyped or deleted. Create a new one in the Console and paste it again. |
 | *"Too many requests… or your credit ran out"* | Wait a minute, or add credit under **Billing** in the Anthropic Console. |
-| `address already in use` / port 8000 busy | The app is probably already running in another window. Close that window, or change `8000` to `8001` in `start.bat` and open http://localhost:8001. |
-| The page says it can't reach the backend | The black window was closed. Start the app again. |
+| `address already in use` / port 8000 busy | Another program is using port 8000. Change `8000` to `8001` (in two places) in `start.bat`, then open http://localhost:8001. |
+| The page says it can't reach the backend, or http://localhost:8000 won't load | The app isn't running. Double-click the Desktop icon. |
 
 ---
 
@@ -167,7 +147,8 @@ The first time you start the app, it adds one example goal per life area plus a 
 
 ```
 LifeControlCenter/
-├── start.bat / start.sh     ← double-click / run to start the app
+├── INSTALL.bat              ← one-time Windows setup (runs scripts/install.ps1)
+├── start.bat / start.sh     ← starts the app (the Desktop icon runs start.bat)
 ├── requirements.txt         ← Python packages the app needs
 ├── .env.example             ← template for your settings (copy to .env)
 ├── data/                    ← your database lives here (not uploaded to GitHub)

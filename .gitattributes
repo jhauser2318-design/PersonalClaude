@@ -4,3 +4,6 @@
 # Windows batch files need Windows line endings
 *.bat text eol=crlf
 *.sh text eol=lf
+*.ps1 text eol=crlf
+*.ico binary
+*.png binary

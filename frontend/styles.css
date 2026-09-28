@@ -28,6 +28,8 @@
   --warning: #fbbf24;
   --warning-soft: rgba(251, 191, 36, .12);
   --success: #34d399;
+  --series-1: #3987e5;
+  --series-2: #d95926;
   --success-soft: rgba(52, 211, 153, .12);
   --shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 8px 30px rgba(0, 0, 0, .35);
   --shadow-lg: 0 24px 70px rgba(0, 0, 0, .6);
@@ -64,6 +66,8 @@
   --warning: #b45309;
   --warning-soft: rgba(245, 158, 11, .12);
   --success: #059669;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
   --success-soft: rgba(5, 150, 105, .10);
   --shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px rgba(15, 23, 42, .06);
   --shadow-lg: 0 24px 60px rgba(15, 23, 42, .18);
@@ -95,6 +99,8 @@
     --warning: #b45309;
     --warning-soft: rgba(245, 158, 11, .12);
     --success: #059669;
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
     --success-soft: rgba(5, 150, 105, .10);
     --shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px rgba(15, 23, 42, .06);
     --shadow-lg: 0 24px 60px rgba(15, 23, 42, .18);
@@ -752,6 +758,38 @@ a.btn { text-decoration: none; color: inherit; }
   .fin-day-in:not(:empty)::after { content: "●"; font-size: 8px; }
   .fin-day-label { font-size: 8px; }
   .fin-rule-form { flex-direction: column; align-items: stretch; }
+}
+
+/* ---------- Finances: income line & Loans ---------- */
+.fin-days-rate { position: absolute; left: 0; right: 0; border-top: 2px solid var(--series-2); pointer-events: none; z-index: 1; }
+.fin-days-rate span { position: absolute; right: 0; bottom: 3px; font: 600 10.5px var(--font-mono); color: var(--text-2);
+  background: color-mix(in srgb, var(--surface-solid) 85%, transparent); padding: 0 4px; border-radius: 4px; }
+.fin-legend i.line { width: 14px; height: 0; border-top: 2px solid var(--c); border-radius: 0; vertical-align: middle; }
+.fin-link { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font: inherit; text-decoration: underline; }
+.loan-card { padding: 16px 18px; margin-bottom: 14px; }
+.loan-head { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.loan-head h2 { margin: 0; font: 600 18px var(--font-display); }
+.loan-head > div:first-child { flex: 1; min-width: 200px; }
+.loan-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+.loan-stats > div { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
+.loan-stats b { display: block; font: 650 17px var(--font-mono); margin-top: 5px; }
+.loan-now { color: var(--text-2); font-size: 13.5px; margin: 0 0 12px; }
+.loan-whatif { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 12px 0; border-top: 1px solid var(--border); }
+.loan-whatif input[type=range] { accent-color: var(--series-2); }
+.loan-result { font-size: 14px; margin: 4px 0 10px; }
+.loan-result b { font-family: var(--font-mono); }
+.loan-chart { position: relative; }
+.loan-chart svg { display: block; max-width: 100%; height: auto; touch-action: pan-y; }
+.loan-chart .grid { stroke: var(--border); stroke-width: 1; }
+.loan-chart .axis-label { fill: var(--text-3); font: 11px var(--font-mono); }
+.loan-chart .end-label { fill: var(--text-2); font: 600 11.5px var(--font); }
+.loan-chart .hover-line { stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 3 3; }
+.loan-tip { position: absolute; pointer-events: none; background: var(--surface-solid); border: 1px solid var(--border-strong);
+  border-radius: 10px; padding: 8px 10px; font-size: 12.5px; box-shadow: var(--shadow-lg); white-space: nowrap; z-index: 2; }
+.loan-tip i { display: inline-block; width: 10px; height: 2px; background: var(--c); margin-right: 6px; vertical-align: middle; }
+@media (max-width: 700px) {
+  .loan-stats { grid-template-columns: 1fr 1fr; }
+  .loan-whatif { grid-template-columns: 1fr; }
 }
 
 /* ---------- AI models (Settings) ---------- */

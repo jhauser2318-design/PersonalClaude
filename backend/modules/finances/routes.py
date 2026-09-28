@@ -214,3 +214,70 @@ async def apply_rules():
         return {"sorted": await run_in_threadpool(assistant.resort)}
     except AssistantError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- Income per day (Daily view) ------------------------------------------------------
+
+class IncomeIn(BaseModel):
+    monthly: float | None = None
+
+
+@router.get("/income")
+def income():
+    return _run(service.income_rate)
+
+
+@router.put("/income")
+def set_income(body: IncomeIn):
+    return _run(service.set_income_monthly, body.monthly)
+
+
+# --- Loans and payoff forecasts ---------------------------------------------------------
+
+class LoanIn(BaseModel):
+    name: str | None = None
+    lender: str | None = None
+    account_id: str | None = None
+    balance: float | None = None
+    apr: float | None = None
+    payment: float | None = None
+    due_day: int | None = None
+    notes: str | None = None
+
+
+class ForecastIn(BaseModel):
+    extra: float = 0
+    lump: float = 0
+
+
+@router.get("/loans")
+def loans():
+    def work(conn):
+        out = []
+        for loan in service.list_loans(conn):
+            if loan.get("id") and loan["payment"]:
+                loan["forecast"] = service.amortize(loan["balance"], loan["apr"], loan["payment"])
+            out.append(loan)
+        return {"loans": out, "income": service.income_rate(conn)}
+    return _run(work)
+
+
+@router.post("/loans")
+def add_loan(body: LoanIn):
+    return _run(service.save_loan, body.model_dump(exclude_none=True))
+
+
+@router.patch("/loans/{loan_id}")
+def update_loan(loan_id: int, body: LoanIn):
+    return _run(service.save_loan, body.model_dump(exclude_unset=True), loan_id)
+
+
+@router.delete("/loans/{loan_id}")
+def delete_loan(loan_id: int):
+    _run(service.delete_loan, loan_id)
+    return {"ok": True}
+
+
+@router.post("/loans/{loan_id}/forecast")
+def forecast(loan_id: int, body: ForecastIn):
+    return _run(service.loan_forecast, loan_id, body.extra, body.lump)

@@ -28,7 +28,7 @@ MODEL_IDS = {m["id"] for m in MODELS}
 
 ROLES = {
     "command": {"name": "AI bar", "default": "claude-sonnet-5",
-                "what": "Adds and edits goals, tasks, routines, your schedule, events, shopping, follow-ups, people and workouts; answers questions."},
+                "what": "Adds and edits goals, tasks, routines, your schedule, events, shopping, follow-ups, people and fun things you did; answers questions."},
     "email": {"name": "Email assistant", "default": "claude-sonnet-5",
               "what": "Searches and reads your Gmail, answers questions, drafts replies."},
     "finance": {"name": "Finance assistant", "default": "claude-sonnet-5",

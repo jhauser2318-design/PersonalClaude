@@ -22,7 +22,7 @@ ACTION_TYPES = ["create_goal", "update_goal", "add_note", "create_task", "update
                 "add_shopping_item", "update_shopping_item", "remove_shopping_item",
                 "create_followup", "update_followup", "set_reminder",
                 "add_schedule_block", "update_schedule_block", "remove_schedule_block",
-                "log_cpa_score", "add_person", "log_contact", "log_workout", "log_body_weight"]
+                "log_cpa_score", "add_person", "log_contact", "log_fun", "add_fun_idea"]
 
 
 # Every action field is always present, with a "blank" value when it doesn't
@@ -38,7 +38,7 @@ BLANKS = {
     "event_id": "", "start": "", "end": "", "location": "",
     "item_id": 0, "category": "", "price": -1, "url": "",
     "followup_id": 0, "person": "", "followup_kind": "", "remind_at": "",
-    "block_id": 0, "sets": 0, "reps": 0, "minutes": 0,
+    "block_id": 0,
 }
 YES_NO = {"yes": True, "no": False}
 
@@ -81,9 +81,6 @@ ACTION_SCHEMA = {
         "followup_kind": {"type": "string", "enum": ["todo", "waiting", ""]},
         "remind_at": {"type": "string"},
         "block_id": {"type": "integer"},
-        "sets": {"type": "integer"},
-        "reps": {"type": "integer"},
-        "minutes": {"type": "number"},
     },
     "additionalProperties": False,
 }
@@ -115,7 +112,7 @@ RESPONSE_SCHEMA = {
     "additionalProperties": False,
 }
 
-SYSTEM_PROMPT = """You are the command bar of "Life Control Center", a personal dashboard where the user tracks goals, tasks, routines, a daily schedule, follow-ups, people, workouts and their CPA exam across four life areas (work, health, social, education), next to their Google Calendar.
+SYSTEM_PROMPT = """You are the command bar of "Life Control Center", a personal dashboard where the user tracks goals, tasks, routines, a daily schedule, follow-ups, people, fun things they did and their CPA exam across four life areas (work, health, social, education), next to their Google Calendar.
 
 The user types short natural sentences. Work out what they mean and respond with JSON in one of these forms:
 
@@ -123,7 +120,7 @@ The user types short natural sentences. Work out what they mean and respond with
 2. intent "answer": the user asked a question (e.g. "What should I focus on this week?"). Leave "actions" empty and answer in "reply" using their actual goals and tasks. Keep it concise: a short intro and at most 5 bullet points starting with "- ". Mention overdue and high-priority items first.
 3. intent "clarify": you are not reasonably sure what they want, or which goal/task they mean (for example two goals match equally well, or none match). Leave "actions" empty and ask ONE short clarifying question in "reply". Never guess when a wrong guess would change the wrong item.
 
-Actions. Every field must be present in every action. For fields that don't apply, use the blank value: "" for text and choice fields, 0 for goal_id/task_id/habit_id/block_id/times_per_week/target_amount/amount/sets/reps/minutes, -1 for progress, [] for days, false for link_to_new_goal. done and active take "yes", "no" or "". "Leave X unchanged" always means the blank value.
+Actions. Every field must be present in every action. For fields that don't apply, use the blank value: "" for text and choice fields, 0 for goal_id/task_id/habit_id/block_id/times_per_week/target_amount/amount, -1 for progress, [] for days, false for link_to_new_goal. done and active take "yes", "no" or "". "Leave X unchanged" always means the blank value.
 - create_goal: title, area (required); description, target_date, status, progress (optional).
 - update_goal: goal_id (required) plus only the fields that change (title, area, description, target_date, status, progress). Leave all others blank.
 - add_note: goal_id (required), note (required). A timestamped progress update on a goal. Use this whenever the user reports something they did toward a goal ("Went to the gym today").
@@ -149,9 +146,9 @@ People:
 - add_person: someone the user wants to keep track of. title = their name; date = birthday (YYYY-MM-DD, or "0000-MM-DD" if the year is unknown), "" if not given; amount = reach out every N days (0 if not given, e.g. "every 2 weeks" = 14); description = relation (family, friend, partner, work, mentor, other) or ""; note = details to remember.
 - log_contact: the user talked to / met / texted someone ("called Mom", "had coffee with Jake"). person = the name exactly as in PEOPLE (if they're not in PEOPLE, add them first with add_person in the same response); title = how: "call", "text", "met", "email" or "talked"; date ("" = today); note = what it was about (optional).
 
-Workouts:
-- log_workout: one exercise the user did. title = exercise name ("Bench press", "Squat", "Run"); sets, reps, amount = weight in pounds (0 for bodyweight); for cardio use minutes (and leave sets/reps 0); date ("" = today); note (optional). One action per exercise; they're grouped into one workout for that day. This also checks off the gym routine, so don't add a log_habit for the gym as well.
-- log_body_weight: amount = weight in pounds, date ("" = today).
+Fun & leisure (a log of fun things the user did, and ideas for later):
+- log_fun: something fun the user did ("went bowling with Sam last night, so fun", "concert at the Riviera Saturday, 5/5"). title = short name of the activity ("Bowling with Sam"); description = category, one of outdoors, friends, food, travel, games, shows, sports, creative, relax, other; date ("" = today); amount = how fun 1-5 if they say or it's clear ("amazing" = 5, "fine" = 3), else 0; person = who they were with, or ""; location = where, or ""; price = what it cost if said, else -1; note = extra detail (optional). If an idea in FUN ideas matches, still use log_fun (the app keeps both).
+- add_fun_idea: something fun they want to do some day ("I want to try axe throwing", "add a Chicago food tour to my fun ideas"). title, description = category, note (optional).
 
 4. intent "email": the request needs the user's email (Gmail): questions about emails ("what did Sarah say about the budget?", "any bills due?", "summarize my unread emails") or writing/replying/sending an email ("reply to Sarah that Thursday works", "email Alex about dinner"). Leave "actions" empty and put a very short note in "reply" ("Checking your email…"); a separate email assistant with Gmail access takes it from there.
 5. intent "finance": the request is about the user's money: bank/credit card balances, transactions, spending, income, cash flow, budgets, subscriptions, or a financial report ("how much did I spend on food last month?", "am I on budget?", "what are my subscriptions?", "set my dining budget to $300", "give me a spending report", "how did yesterday go money-wise?"), or a standing money rule ("always put Venmo to Mike in Housing", "remember that transfers to savings aren't spending"). Leave "actions" empty and put a very short note in "reply" ("Checking your finances…"); a separate finance assistant with access to the user's synced accounts takes it from there. Shopping-list questions are NOT finance: answer those from SHOPPING.
@@ -260,7 +257,7 @@ def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | Non
                      f"{'done' if b['done'] else 'open'}")
     lines += ["", "PEOPLE (id | name | relation | birthday MM-DD | last contact | reach out):"]
     lines += extra.get("people") or ["(none)"]
-    for key in ("cpa", "workouts", "home"):
+    for key in ("cpa", "fun", "home"):
         if extra.get(key):
             lines += ["", extra[key]]
     return "\n".join(lines)

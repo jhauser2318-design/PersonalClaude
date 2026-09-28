@@ -44,7 +44,7 @@ export async function render(view) {
       ${statCard("Tasks done", s.tasks_done.length, s.tasks_overdue.length ? `${s.tasks_overdue.length} overdue` : "none overdue")}
       ${statCard("Routines", routinesPlanned ? `${Math.round((100 * routinesDone) / routinesPlanned)}%` : "—", `${routinesDone}/${routinesPlanned} check-ins`)}
       ${statCard("Focus", `${Math.round(s.focus_minutes / 60 * 10) / 10}<small> h</small>`, s.schedule.total ? `${s.schedule.done}/${s.schedule.total} blocks done` : "")}
-      ${statCard("Workouts", s.workouts.length, s.cpa ? `${s.cpa.hours} h CPA study` : "")}
+      ${statCard("Fun things", s.fun.length, s.cpa ? `${s.cpa.hours} h CPA study` : "")}
     </div>
     <div class="rv-cols">
       <div>

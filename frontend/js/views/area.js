@@ -32,10 +32,10 @@ export async function render(view, areaId) {
     </div>
     ${areaId === "education" ? `<a class="card area-link" href="#/cpa" style="--area:${area.color}">${icon("book")}
       <div><b>CPA Exam Planner</b><div class="muted small">Exam dates, study hours vs plan, practice scores, credit window</div></div><span>→</span></a>` : ""}
-    ${areaId === "health" ? `<a class="card area-link" href="#/workouts" style="--area:${area.color}">${icon("dumbbell")}
-      <div><b>Workouts</b><div class="muted small">Sessions, records, body weight, Apple Health</div></div><span>→</span></a>` : ""}
-    ${areaId === "social" ? `<a class="card area-link" href="#/people" style="--area:${area.color}">${icon("users")}
-      <div><b>People</b><div class="muted small">Birthdays and staying in touch</div></div><span>→</span></a>` : ""}
+        ${areaId === "social" ? `<div class="area-links"><a class="card area-link" href="#/people" style="--area:${area.color}">${icon("users")}
+      <div><b>People</b><div class="muted small">Birthdays and staying in touch</div></div><span>→</span></a>
+      <a class="card area-link" href="#/fun" style="--area:${area.color}">${icon("sparkle")}
+      <div><b>Fun</b><div class="muted small">Things you did for fun, and ideas for next time</div></div><span>→</span></a></div>` : ""}
     <h2 class="section">Goals <span class="count">${goals.length}</span><span class="line"></span></h2>
     <div id="area-goals">${goalGrid(goals, `No ${area.name.toLowerCase()} goals yet.`)}</div>
     <h2 class="section">Routines <span class="count">${routines.length}</span><span class="line"></span><a href="#/routines">Details →</a></h2>

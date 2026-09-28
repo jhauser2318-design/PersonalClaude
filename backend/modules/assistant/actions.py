@@ -17,7 +17,7 @@ from ..habits import service as habits
 from ..shopping import links as shopping_links
 from ..shopping import service as shopping
 from ..cpa import service as cpa
-from ..fitness import service as fitness
+from ..fun import service as fun
 from ..people import service as people
 from ..schedule import service as schedule
 
@@ -110,7 +110,6 @@ def apply_actions(conn, actions: list[dict]) -> tuple[list[dict], list[str]]:
 def _apply(conn, actions: list[dict], undo: list[dict]) -> tuple[list[dict], list[str]]:
     summary: list[str] = []
     last_new_goal_id = None
-    pending_workouts: dict[str, list[dict]] = {}
 
     for action in actions:
         kind = action.get("type")
@@ -405,20 +404,23 @@ def _apply(conn, actions: list[dict], undo: list[dict]) -> tuple[list[dict], lis
             undo.append({"kind": "interaction", "id": row["id"], "before": None})
             summary.append(f"👤 Logged: {row['kind']} with {person['name']}" + (f" ({row['note']})" if row["note"] else ""))
 
-        elif kind == "log_workout":
-            day = action.get("date") or _date.today().isoformat()
-            pending_workouts.setdefault(day, []).append(action)
+        elif kind == "log_fun":
+            entry = fun.add_entry(conn, {"title": action.get("title"), "category": action.get("description"),
+                                         "date": action.get("date"), "rating": action.get("amount"),
+                                         "with_whom": action.get("person") or "", "place": action.get("location") or "",
+                                         "cost": action.get("price"), "notes": action.get("note") or ""})
+            undo.append({"kind": "fun", "id": entry["id"], "before": None})
+            stars = f" {'★' * entry['rating']}" if entry["rating"] else ""
+            who = f" with {entry['with_whom']}" if entry["with_whom"] else ""
+            summary.append(f"🎉 Logged: {entry['title']}{who} ({_day_label(entry['date'])}){stars}")
 
-        elif kind == "log_body_weight":
-            res = fitness.log_weight(conn, action.get("amount"), action.get("date"))
-            undo.append({"kind": "body_weight", "date": res["date"], "before": res["before"]})
-            summary.append(f"⚖ Body weight {res['weight']:g} lb ({_day_label(res['date'])})")
+        elif kind == "add_fun_idea":
+            idea = fun.add_idea(conn, action.get("title") or "", action.get("description") or "other", action.get("note") or "")
+            undo.append({"kind": "fun_idea", "id": idea["id"], "before": None})
+            summary.append(f"💡 Added to your fun ideas: {idea['title']}")
 
         else:
             raise ValidationError(f"Unknown action '{kind}'")
-
-    for day, items in pending_workouts.items():
-        summary.append(_save_workout(conn, undo, day, items))
 
     return undo, summary
 
@@ -426,29 +428,6 @@ def _apply(conn, actions: list[dict], undo: list[dict]) -> tuple[list[dict], lis
 def _day_label(day: str) -> str:
     return _date.fromisoformat(day).strftime("%a %d %b")
 
-
-def _save_workout(conn, undo: list[dict], day: str, items: list[dict]) -> str:
-    """All log_workout actions for one day become one workout (added to that day's workout if there is one)."""
-    lifts = [a for a in items if not a.get("minutes")]
-    cardio = [a for a in items if a.get("minutes")]
-    sets = [{"exercise": a.get("title") or "Exercise", "sets": a.get("sets") or 1, "reps": a.get("reps") or 0,
-             "weight": a.get("amount") or 0} for a in lifts]
-    minutes = sum(a["minutes"] for a in cardio) or None
-    title = ", ".join(dict.fromkeys((a.get("title") or "Workout") for a in items))[:60]
-    notes = "; ".join(a["note"] for a in items if a.get("note"))
-    habit = fitness.gym_habit(conn)
-    had_log = habit and habits.get_log(conn, habit["id"], day)
-    w = fitness.save_workout(conn, {"date": day, "kind": "cardio" if cardio and not lifts else "strength",
-                                    "title": title, "minutes": minutes, "notes": notes, "sets": sets})
-    undo.append({"kind": "workout", "id": w["id"], "before": None})
-    if habit and not had_log:
-        log = habits.get_log(conn, habit["id"], day)
-        if log:
-            undo.append({"kind": "habit_log", "id": log["id"], "before": None})
-    bits = [f"{s['exercise']} {s['sets']}×{s['reps']}" + (f" @ {s['weight']:g} lb" if s["weight"] else "") for s in w["sets"]]
-    if minutes:
-        bits.append(f"{minutes:g} min")
-    return f"🏋 Workout logged ({_day_label(day)}): " + ", ".join(bits) + (f" · ✓ {habit['title']}" if habit and not had_log else "")
 
 
 def log_command(conn, text: str, reply: str, undo: list[dict]) -> int:
@@ -469,7 +448,7 @@ def undo_command(conn, log_id: int) -> str:
     tables = {"goal": "goals", "task": "tasks", "note": "goal_notes",
               "habit": "habits", "habit_log": "habit_logs", "shopping": "shopping_items",
               "followup": "followups", "block": "schedule_blocks", "cpa_score": "cpa_scores",
-              "person": "people", "interaction": "interactions", "workout": "workouts"}
+              "person": "people", "interaction": "interactions", "fun": "fun_log", "fun_idea": "fun_ideas"}
     # Undo in reverse order: the last change is reverted first.
     for change in reversed(json.loads(row["changes"])):
         if change["kind"] == "event":
@@ -489,15 +468,6 @@ def undo_command(conn, log_id: int) -> str:
             conn.execute(f"INSERT INTO {change['table']} ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})",
                          [change["before"][c] for c in cols])
             continue
-        if change["kind"] == "body_weight":
-            if change["before"]:
-                conn.execute("INSERT OR REPLACE INTO body_weight (date, weight) VALUES (?, ?)",
-                             (change["before"]["date"], change["before"]["weight"]))
-            else:
-                conn.execute("DELETE FROM body_weight WHERE date = ?", (change["date"],))
-            continue
-        if change["kind"] == "workout":
-            conn.execute("DELETE FROM workout_sets WHERE workout_id = ?", (change["id"],))
         if change["kind"] == "person":
             conn.execute("DELETE FROM interactions WHERE person_id = ?", (change["id"],))
         table = tables[change["kind"]]

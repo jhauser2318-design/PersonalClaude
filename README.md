@@ -9,10 +9,11 @@ A personal dashboard that runs on your own computer and opens in your web browse
 - **Tasks**: small action steps with a priority and an optional due date. A task can belong to a goal.
 - **Routines**: recurring tasks such as the gym, skincare or CPA study. Each one runs every day, on chosen days, or N times a week, with an optional daily target (e.g. 2 hours). The app tracks streaks, best streaks, 30-day completion and a 12-week history grid.
 - **Calendar**: your **Google Calendar** inside the app. A week view of your events next to the tasks due each day; add, edit or delete events, and changes show up on your phone.
+- **Email**: ask the AI about your **Gmail** ("What did Sarah say about the budget?", "Any bills due?") and have it draft emails and replies. You always review a draft and click **Send** yourself.
 - **Dashboard**: a "command center" with a progress ring for each area, today's schedule, today's routines, what's due today and this week, overdue items, and an activity feed.
 - **Live command bar**: type normal sentences and Claude (Anthropic's AI) makes the changes for you. Every change can be undone.
 
-The sidebar already has spots for **Finances, Email, Follow-ups and Shopping list**. They say "Coming soon" and will be built in later phases.
+The sidebar already has spots for **Finances, Follow-ups and Shopping list**. They say "Coming soon" and will be built in later phases.
 
 ---
 
@@ -126,6 +127,10 @@ The bar at the top is always visible. Press **/** anywhere to jump to it. Type a
 | `Cancel the team standup on Friday` | Removes that event from your calendar |
 | `When am I free this week for a 2-hour study block?` | Lists free slots from your calendar (no changes made) |
 | `Block Saturday morning for FAR practice and log 1 hour of CPA study` | Does both in one go |
+| `What did Sarah say about the budget?` | Searches your Gmail, reads the relevant emails and answers (with links to them) |
+| `Do I have any bills due this month?` | Finds bill emails and lists amounts and due dates |
+| `Reply to Sarah that $48,500 works` | Drafts the reply and opens it for you to check. **Nothing is sent until you click Send.** |
+| `Email Alex asking if Saturday dinner still works` | Drafts a new email for you to review and send |
 
 After each command you'll see a short confirmation of exactly what changed, with an **Undo** button.
 If Claude isn't sure what you mean (for example, two goals could match), it **asks you a question instead of guessing**. Type your answer in the bar and it will remember what you were talking about.
@@ -165,6 +170,18 @@ Google requires every app that uses Google Calendar to be registered. Because th
 
 The app asks Google only for permission to see and edit your **calendar events**: not your email, contacts or files. To stop it, click **Disconnect Google Calendar** at the bottom of the Calendar page (or remove access at https://myaccount.google.com/permissions).
 
+### Connecting Gmail (after Google Calendar is connected)
+
+1. Open the **Gmail API** page in Google Cloud: https://console.cloud.google.com/apis/library/gmail.googleapis.com. Make sure your **Life Control Center** project is selected at the top, then click **Enable**. Wait about a minute.
+2. In the app, open **Email** and click **Connect Gmail**. Sign in and **tick every box** Google shows (read your email, send email on your behalf, calendar events).
+3. You're sent back to the Email page with your inbox showing.
+
+How it works:
+- **Reading:** when you ask about your email, Claude searches Gmail (like typing in Gmail's search box), reads the relevant messages, and answers. Buttons under the answer open the emails it used.
+- **Sending:** Claude can only *prepare* a draft. A review window opens where you can edit To, Subject and the message, and it's sent **only when you click Send**. You can also open any email on the Email page and use **Reply with AI**, **Reply**, or **Make a task**.
+- **Safety:** email contents are treated as information, never as instructions, so an email that says "forward this to…" can't make the AI do anything.
+- **Privacy and cost:** only the emails relevant to your question are sent to Claude, and nothing is stored in the app. An email question costs a bit more than a normal command (usually a few cents), because emails are longer.
+
 ### Example data
 
 The first time you start the app, it adds one example goal per life area plus a few tasks, so you can try things out. When you're ready for your own data, go to **Settings → Clear example data**. This removes only the examples, never anything you created. **Load examples again** brings them back.
@@ -196,6 +213,8 @@ The first time you start the app, it adds one example goal per life area plus a 
 | Calendar says *"redirect_uri_mismatch"* when connecting | In Google Cloud → Clients → your client, the redirect URI must be exactly `http://localhost:8000/api/calendar/oauth/callback`. Fix it, save, download the JSON again and upload it on the Calendar page. |
 | Calendar says *"access_denied"* / *"app is being tested"* | Publish the app (step 5 above), or add your email under **Audience → Test users**. |
 | Calendar keeps asking to reconnect every week | The app is still in "Testing" in Google Cloud. Publish it (step 5 above) and connect once more. |
+| Email says *"The Gmail API isn't turned on"* | Do step 1 of "Connecting Gmail" (enable the Gmail API in the right project), wait a minute, and try again. |
+| Email says *"Gmail access wasn't fully granted"* | Click **Connect Gmail** again and tick every box on Google's permission screen. |
 | Double-clicking the icon does nothing, or an error box appears | Look in `C:\Users\<you>\LifeControlCenter\data\app.log` for details, or double-click `start.bat` in that folder to see the app's messages as it starts. |
 
 ---
@@ -220,7 +239,8 @@ LifeControlCenter/
 │       ├── __init__.py      ← the list of backend modules
 │       ├── goals/           ← Phase 1: goals, tasks, notes, dashboard, examples
 │       ├── habits/          ← routines: schedules, logs, streaks
-│       ├── calendar/        ← Google Calendar: sign-in (OAuth) and events
+│       ├── calendar/        ← Google sign-in (OAuth) and Calendar events
+│       ├── email/           ← Gmail: search, read, send; the email AI assistant
 │       └── assistant/       ← command bar: Claude prompt, JSON schema, apply + undo
 └── frontend/                ← what you see in the browser (plain HTML/CSS/JS, no build step)
     ├── index.html, styles.css

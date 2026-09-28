@@ -4,6 +4,7 @@ import { icon } from "./icons.js";
 import { EXTRA_ROUTES, MODULES } from "./modules.js";
 import { setAreas, state } from "./state.js";
 import { esc, toast } from "./ui.js";
+import { openDraft, openMessage } from "./email-ui.js";
 import { checkForUpdates, updateState } from "./updates.js";
 import * as comingSoon from "./views/coming-soon.js";
 
@@ -84,6 +85,8 @@ async function updateBadge() {
 // ===========================================================================
 
 const EXAMPLES = [
+  "What did Sarah say about the budget?",
+  "Reply to Alex that Saturday dinner works",
   "Schedule CPA study tomorrow 7–9pm at the library",
   "When am I free this week for a 2-hour study block?",
   "Went to the gym and did my skincare",
@@ -116,7 +119,7 @@ function formatReply(text) {
 
 function showResult(result) {
   const box = $("#command-result");
-  const icons = { applied: "✓", answer: "i", clarify: "?", error: "!" };
+  const icons = { applied: "✓", answer: "i", clarify: "?", error: "!", email: "@" };
   box.className = `command-result ${result.status}`;
   box.innerHTML = `
     <div class="cr-icon" aria-hidden="true">${icons[result.status] || "i"}</div>
@@ -124,13 +127,22 @@ function showResult(result) {
       ${formatReply(result.reply || "")}
       ${result.changes?.length ? `<ul>${result.changes.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
       ${result.status === "clarify" ? `<div class="cr-hint">Type your answer in the bar above.</div>` : ""}
+      ${result.sources?.length ? `<div class="cr-sources"><span class="eyebrow">From</span>${result.sources.map((s) =>
+        `<button class="source" data-mail="${esc(s.id)}">✉ ${esc(s.from)}: ${esc(s.subject)}</button>`).join("")}</div>` : ""}
     </div>
     <div class="cr-actions">
       ${result.log_id ? `<button class="btn small" id="undo-btn">${icon("undo")} Undo</button>` : ""}
+      ${result.draft ? `<button class="btn small primary" id="draft-btn">${icon("mail")} Review &amp; send</button>` : ""}
       <button class="icon-btn" id="close-result" aria-label="Dismiss">${icon("x")}</button>
     </div>`;
   box.hidden = false;
   $("#close-result").onclick = () => { box.hidden = true; };
+  box.querySelectorAll("[data-mail]").forEach((b) => { b.onclick = () => openMessage(b.dataset.mail); });
+  if (result.draft) {
+    const review = () => openDraft(result.draft, () => { box.hidden = true; });
+    $("#draft-btn").onclick = review;
+    review(); // open the draft right away; nothing is sent until you click Send
+  }
   const undoBtn = $("#undo-btn");
   if (undoBtn) undoBtn.onclick = async () => {
     undoBtn.disabled = true;
@@ -155,7 +167,12 @@ async function runCommand(text) {
     const result = await api.post("/command", { text, history });
     lastActivity = Date.now();
     if (result.status === "applied") history = [];
-    else if (result.status !== "error") history = [...history, { role: "user", content: text }, { role: "assistant", content: result.reply }].slice(-6);
+    else if (result.status !== "error") {
+      // For email answers, remember which emails were used so follow-ups ("reply to that one") work.
+      const refs = result.sources?.length
+        ? `\n(Emails used: ${result.sources.map((s) => `id ${s.id}, "${s.subject}" from ${s.from}`).join("; ")})` : "";
+      history = [...history, { role: "user", content: text }, { role: "assistant", content: result.reply + refs }].slice(-6);
+    }
     if (result.status !== "error") input.value = "";
     showResult(result);
     if (result.status === "applied") state.refresh();

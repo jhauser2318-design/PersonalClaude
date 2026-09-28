@@ -64,6 +64,17 @@ async def run_command(body: CommandIn):
 
     intent = result.get("intent")
     reply = result.get("reply", "").strip()
+    if intent == "email":
+        # Hand over to the email assistant (it can search/read Gmail and draft,
+        # never send: sending needs the user's click on Send).
+        from ..email import assistant as email_assistant
+        try:
+            answer = await run_in_threadpool(
+                email_assistant.ask, text, [t.model_dump() for t in body.history])
+        except (AssistantError, CalendarError) as e:
+            return {"status": "error", "reply": str(e), "changes": [], "log_id": None}
+        return {"status": "email", "reply": answer["answer"], "sources": answer["sources"],
+                "draft": answer["draft"], "changes": [], "log_id": None}
     if intent != "actions" or not result["actions"]:
         return {"status": "clarify" if intent == "clarify" else "answer",
                 "reply": reply, "changes": [], "log_id": None}

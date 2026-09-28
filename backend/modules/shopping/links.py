@@ -10,6 +10,8 @@ import re
 import urllib.error
 import urllib.request
 
+from ... import net
+
 HEADERS = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                    "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"),
@@ -70,7 +72,7 @@ def fetch_details(url: str) -> dict:
         url = "https://" + url
     try:
         req = urllib.request.Request(url, headers=HEADERS)
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with net.urlopen(req, timeout=10) as resp:
             page = resp.read(2_000_000).decode(resp.headers.get_content_charset() or "utf-8", "replace")
     except urllib.error.HTTPError as e:
         result["error"] = f"The store's website refused the request ({e.code}). Enter the details yourself."

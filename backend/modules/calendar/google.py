@@ -21,7 +21,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from ... import config
+from ... import config, net
 from ...database import demo_on
 
 CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events"
@@ -72,7 +72,7 @@ def http_request(method: str, url: str, *, params=None, form=None, body=None, to
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with net.urlopen(req, timeout=20) as resp:
             raw = resp.read()
             return resp.status, (json.loads(raw) if raw else None)
     except urllib.error.HTTPError as e:

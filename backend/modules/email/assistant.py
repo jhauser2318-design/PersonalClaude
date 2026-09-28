@@ -137,6 +137,7 @@ def ask(question: str, history: list[dict]) -> dict:
     for step in range(MAX_STEPS + 1):
         try:
             response = client.beta.messages.create(messages=messages, **request)
+            ai_models.record("email", response, request["model"])
         except anthropic.AuthenticationError:
             raise AssistantError("Anthropic rejected the API key. Check ANTHROPIC_API_KEY in your .env file.")
         except anthropic.RateLimitError:

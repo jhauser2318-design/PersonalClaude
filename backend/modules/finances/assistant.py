@@ -25,12 +25,16 @@ BATCH = 120
 
 def _request(role: str, effort: str, output_format: dict | None = None, **kwargs) -> dict:
     """A request for the model chosen for this feature in Settings → AI models."""
-    return dict(**kwargs, **ai_models.request_options(role, effort, output_format))
+    return dict(**kwargs, **ai_models.request_options(role, effort, output_format), _role=role)
 
 
 def _call(client, request: dict):
+    request = dict(request)
+    role = request.pop("_role", "finance")  # which feature, for Settings → AI usage
     try:
-        return client.beta.messages.create(**request)
+        response = client.beta.messages.create(**request)
+        ai_models.record(role, response, request["model"])
+        return response
     except anthropic.AuthenticationError:
         raise AssistantError("Anthropic rejected the API key. Check ANTHROPIC_API_KEY in your .env file.")
     except anthropic.RateLimitError:

@@ -1,14 +1,14 @@
 // Settings: theme, example data, and command bar status.
 import { api } from "../api.js";
 import { state } from "../state.js";
-import { esc, toast } from "../ui.js";
+import { esc, toast, todayISO } from "../ui.js";
 import { getTheme, setTheme } from "../theme.js";
 import { checkForUpdates } from "../updates.js";
 import { renderPhone } from "./phone.js";
 
 export async function render(view) {
-  const [status, version, ai, demo] = await Promise.all([api.get("/command/status"), api.get("/version"),
-    api.get("/command/models"), api.get("/demo")]);
+  const [status, version, ai, demo, usage] = await Promise.all([api.get("/command/status"), api.get("/version"),
+    api.get("/command/models"), api.get("/demo"), api.get("/command/usage")]);
   const theme = getTheme();
   view.innerHTML = `
     <div class="page-head"><div><h1>Settings</h1></div></div>
@@ -44,6 +44,7 @@ export async function render(view) {
           </label>`).join("")}</div>
         <ul class="ai-notes">${ai.models.map((m) => `<li><b>${esc(m.name)}</b> (${esc(m.price)} per million tokens in / out): ${esc(m.note)}</li>`).join("")}</ul>
       </section>
+      <section class="card" id="ai-usage">${usageCard(usage)}</section>
       <section class="card">
         <h2>Appearance</h2>
         <p>Dark is the default command-center look. “System” follows your computer's light/dark setting.</p>
@@ -98,6 +99,7 @@ export async function render(view) {
       toast(`${sel.closest(".ai-role").querySelector("b").textContent} now uses ${sel.selectedOptions[0].textContent.split(" · ")[0]}`);
     } catch (err) { toast(err.message); }
   }));
+  bindUsage(view.querySelector("#ai-usage"));
   view.querySelector("#theme").addEventListener("click", (e) => {
     const b = e.target.closest("button");
     if (!b) return;
@@ -113,5 +115,65 @@ export async function render(view) {
   view.querySelector("#load-examples").addEventListener("click", async () => {
     await api.post("/examples/load");
     toast("Examples added");
+  });
+}
+
+
+// ---------- AI usage & cost ----------
+const usd = (n, digits = 2) => `$${(n ?? 0).toFixed(digits)}`;
+const cents = (n) => (n < 0.01 ? `${(n * 100).toFixed(1)}¢` : n < 1 ? `${(n * 100).toFixed(0)}¢` : usd(n));
+
+function usageCard(u) {
+  const c = u.credits;
+  const maxDay = Math.max(0.0001, ...u.daily.map((d) => d.cost));
+  const pct = c ? Math.max(0, Math.min(100, (c.left / c.amount) * 100)) : 0;
+  return `
+    <h2>AI usage &amp; cost</h2>
+    <p>What the AI features have cost, worked out from the tokens each request used at Anthropic's list prices.
+      These are close estimates; your exact bill is at <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a> → Usage.
+      ${u.first_recorded ? `Counting since ${esc(new Date(u.first_recorded).toLocaleDateString())}.` : "Counting starts with your next AI request."}</p>
+    <div class="use-stats">
+      <div><span class="eyebrow">Today</span><b>${usd(u.today.cost)}</b><small>${u.today.requests} request${u.today.requests === 1 ? "" : "s"}</small></div>
+      <div><span class="eyebrow">This month</span><b>${usd(u.month.cost)}</b><small>${u.month.requests} requests</small></div>
+      <div><span class="eyebrow">Projected month</span><b>${usd(u.month_projection)}</b><small>at this pace</small></div>
+      <div><span class="eyebrow">Last month</span><b>${usd(u.last_month.cost)}</b><small>${u.last_month.requests} requests</small></div>
+    </div>
+    <div class="use-credits">
+      ${c ? `<div class="use-credit-line"><b>≈ ${usd(Math.max(0, c.left))} left</b> of ${usd(c.amount)} added ${esc(new Date(c.since + "T12:00").toLocaleDateString())}
+          · ${usd(c.used)} used${c.days_left != null ? ` · lasts about <b>${c.days_left} more day${c.days_left === 1 ? "" : "s"}</b> at your recent pace (${cents(u.per_day)}/day)` : ""}</div>
+        <div class="progress use-bar" role="progressbar" aria-valuenow="${pct.toFixed(0)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct.toFixed(1)}%"></span></div>`
+      : `<p class="muted small" style="margin:0 0 8px">Tell the app how much credit you bought to see roughly what's left and how long it will last.</p>`}
+      <form class="use-credit-form" id="credit-form">
+        <label class="field"><span>Credits added ($)</span><input type="number" name="amount" min="0" step="1" value="${c ? c.amount : ""}" placeholder="e.g. 5"></label>
+        <label class="field"><span>On</span><input type="date" name="since" value="${c ? esc(c.since) : todayISO()}"></label>
+        <button class="btn small" type="submit">Save</button>
+        ${c ? `<button class="btn small" type="button" id="credit-clear">Clear</button>` : ""}
+      </form>
+    </div>
+    ${u.roles.length ? `
+      <h3 class="ph-sub">This month by feature</h3>
+      <table class="use-table"><thead><tr><th>Feature</th><th>Requests</th><th>Per request</th><th>Total</th></tr></thead>
+        <tbody>${u.roles.map((r) => `<tr><td>${esc(r.name)}</td><td class="mono">${r.requests}</td>
+          <td class="mono">${cents(r.avg_cost)}</td><td class="mono">${usd(r.cost)}</td></tr>`).join("")}</tbody></table>
+      <p class="fin-fine">By model: ${u.models.map((m) => `${esc(m.model)} ${usd(m.cost)} (${m.requests})`).join(" · ")}</p>` : ""}
+    <h3 class="ph-sub">Last 30 days</h3>
+    <div class="use-days" role="img" aria-label="AI cost per day, last 30 days">${u.daily.map((d) => `
+      <span title="${esc(new Date(d.date + "T12:00").toLocaleDateString(undefined, { month: "short", day: "numeric" }))}: ${usd(d.cost, 3)} · ${d.requests} requests">
+        <i style="height:${d.cost ? Math.max(3, (d.cost / maxDay) * 100).toFixed(1) : 0}%"></i></span>`).join("")}</div>
+    <div class="use-days-axis"><span>${esc(new Date(u.daily[0].date + "T12:00").toLocaleDateString(undefined, { month: "short", day: "numeric" }))}</span>
+      <span>busiest day ${usd(maxDay < 0.001 ? 0 : maxDay, 3)}</span><span>today</span></div>`;
+}
+
+function bindUsage(box) {
+  const redraw = (u) => { box.innerHTML = usageCard(u); bindUsage(box); };
+  box.querySelector("#credit-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    if (!f.amount.value) return toast("Enter the amount you added");
+    try { redraw(await api.put("/command/usage/credits", { amount: Number(f.amount.value), since: f.since.value || null })); toast("Saved"); }
+    catch (err) { toast(err.message); }
+  });
+  box.querySelector("#credit-clear")?.addEventListener("click", async () => {
+    redraw(await api.put("/command/usage/credits", { amount: null }));
   });
 }

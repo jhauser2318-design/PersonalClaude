@@ -135,3 +135,20 @@ def undo(log_id: int):
             return {"reply": actions.undo_command(conn, log_id)}
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+class CreditsIn(BaseModel):
+    amount: float | None = None
+    since: str | None = None
+
+
+@router.get("/usage")
+def usage():
+    """Settings → AI usage: requests and estimated cost, per feature and per day."""
+    return ai_models.usage_summary()
+
+
+@router.put("/usage/credits")
+def set_credits(body: CreditsIn):
+    ai_models.set_credits(body.amount, body.since)
+    return ai_models.usage_summary()

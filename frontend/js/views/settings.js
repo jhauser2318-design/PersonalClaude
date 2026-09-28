@@ -3,6 +3,7 @@ import { api } from "../api.js";
 import { state } from "../state.js";
 import { esc, toast } from "../ui.js";
 import { getTheme, setTheme } from "../theme.js";
+import { checkForUpdates } from "../updates.js";
 
 export async function render(view) {
   const [status, version] = await Promise.all([api.get("/command/status"), api.get("/version")]);
@@ -31,8 +32,9 @@ export async function render(view) {
         <p>${version.version
           ? `Version <code>${esc(version.version)}</code>, installed ${esc(new Date(version.updated_at).toLocaleString())}.<br>Latest change: ${esc(version.summary)}`
           : "Version not recorded yet. It will be after the next automatic update."}</p>
-        <p>Updates install automatically: every time you open the app from its Desktop icon, it checks GitHub for a newer version first.
-           Your goals, tasks and API key are never changed by an update.</p>
+        <p>Every time you open the app from its Desktop icon, it checks GitHub for a newer version first.
+           You can also check right now. Your goals, tasks, routines and keys are never changed by an update.</p>
+        <button class="btn" id="settings-update">Check for updates now</button>
       </section>
       <section class="card">
         <h2>Command bar</h2>
@@ -49,6 +51,7 @@ export async function render(view) {
     setTheme(b.dataset.theme);
     render(view);
   });
+  view.querySelector("#settings-update").onclick = (e) => checkForUpdates(e.currentTarget);
   view.querySelector("#clear-examples").addEventListener("click", async () => {
     if (!confirm("Remove all example goals and tasks?")) return;
     const r = await api.post("/examples/clear");

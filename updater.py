@@ -68,21 +68,25 @@ def _summary(message: str) -> str:
     return lines[0]
 
 
-def update() -> bool:
+def update() -> dict:
     """Install the newest version if there is one.
 
-    Returns True if the launcher itself changed (so it should restart itself).
+    Returns {"updated": bool, "launcher_changed": bool, "error": str | None}.
+    launcher_changed means the launcher's own code changed, so it should
+    restart itself.
     """
+    result = {"updated": False, "launcher_changed": False, "error": None}
     try:
         info = json.loads(_get(f"https://api.github.com/repos/{REPO}/commits/{BRANCH}", timeout=6))
         latest = info["sha"]
     except Exception as e:
         logging.info("Update check skipped (%s)", e)
-        return False
+        result["error"] = "Couldn't reach GitHub to check for updates. Are you online?"
+        return result
 
     if read_version().get("sha") == latest:
         logging.info("Already up to date (%s)", latest[:7])
-        return False
+        return result
 
     logging.info("Updating to %s", latest[:7])
     watched = ["launcher.pyw", "updater.py", "requirements.txt"]
@@ -104,7 +108,8 @@ def update() -> bool:
                     shutil.copy2(path, dest)
     except Exception as e:
         logging.warning("Update failed, keeping the current version (%s)", e)
-        return False
+        result["error"] = f"The update couldn't be installed ({e}). The current version is still in place."
+        return result
 
     if _digest(ROOT / "requirements.txt") != before["requirements.txt"]:
         logging.info("Installing new packages")
@@ -121,5 +126,7 @@ def update() -> bool:
         "show_notice": True,
     })
     logging.info("Update installed")
-    return (_digest(ROOT / "launcher.pyw") != before["launcher.pyw"]
-            or _digest(ROOT / "updater.py") != before["updater.py"])
+    result["updated"] = True
+    result["launcher_changed"] = (_digest(ROOT / "launcher.pyw") != before["launcher.pyw"]
+                                  or _digest(ROOT / "updater.py") != before["updater.py"])
+    return result

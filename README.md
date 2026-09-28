@@ -63,14 +63,13 @@ After this, you can delete the ZIP and the extracted folder. The app lives in `C
 
 ### Updates install automatically
 
-Every time you open the app from its Desktop icon, it first checks GitHub for a newer version. While it checks, you'll see a short **"Checking for updates…"** screen.
+**Every time you click the Desktop icon**, the app checks GitHub for a newer version first, even if it's already open. While it checks, you'll see a short **"Checking for updates…"** screen.
 
-- If there's a new version, it downloads and installs it (usually a few seconds), then opens. A small banner tells you what changed.
+- If there's a new version, it installs it (usually a few seconds), restarts itself, and opens. A small banner tells you what changed.
+- You can also click **Check for updates** at the bottom of the sidebar (or in **Settings**) at any time. Open windows refresh themselves once the new version is running.
 - If you're offline, it skips the check and opens normally.
-- **Your goals, tasks, notes and API key are never touched** by an update. Only the app's code changes.
+- **Your goals, tasks, routines, calendar connection and API key are never touched** by an update. Only the app's code changes.
 - **Settings → Version & updates** shows which version you have.
-
-So when Claude (or you) changes the code on GitHub, you'll get it the next time you open the app. If the app is open when the change is made, close it and open it again.
 
 > If you change the app's code files directly in `C:\Users\<you>\LifeControlCenter`, the next automatic update will overwrite them. Make changes on GitHub instead (or ask Claude to).
 

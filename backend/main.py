@@ -4,12 +4,17 @@ Start it from the project folder with:
     python -m uvicorn backend.main:app --port 8000
 then open http://localhost:8000 in your browser.
 """
+import importlib.util
 import json
 import os
+import subprocess
+import sys
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI
+from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 
 from . import config
@@ -77,7 +82,41 @@ def app_info():
 @app.post("/api/app/ping")
 def app_ping():
     RUNNING["last_ping"] = time.time()
-    return {"ok": True}
+    # Windows compare this with the version they loaded, and refresh if it changed.
+    return {"ok": True, "version": RUNNING["version"]}
+
+
+def _load_updater():
+    spec = importlib.util.spec_from_file_location("updater", config.PROJECT_ROOT / "updater.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _restart_app():
+    """Start the desktop launcher again; it replaces this (now out-of-date) copy."""
+    time.sleep(0.5)  # let the "update installed" reply reach the window first
+    exe = Path(sys.executable)
+    windowless = exe.with_name("pythonw.exe")
+    cmd = [str(windowless if windowless.is_file() else exe), str(config.PROJECT_ROOT / "launcher.pyw")]
+    flags = 0x00000008 | 0x00000200 if os.name == "nt" else 0  # detached, so it outlives this process
+    subprocess.Popen(cmd, cwd=config.PROJECT_ROOT, env={**os.environ, "LCC_AFTER_UPDATE": "1"},
+                     creationflags=flags, start_new_session=os.name != "nt")
+
+
+@app.post("/api/app/update")
+async def app_update(background: BackgroundTasks):
+    """The "Check for updates" button: install the newest version, then restart."""
+    result = await run_in_threadpool(_load_updater().update)
+    v = _read_version()
+    if result.get("updated"):
+        background.add_task(_restart_app)
+    return {
+        "updated": bool(result.get("updated")),
+        "error": result.get("error"),
+        "version": (v.get("sha") or "")[:7] or None,
+        "summary": v.get("summary"),
+    }
 
 
 def _read_version() -> dict:

@@ -7,12 +7,26 @@ import { checkForUpdates } from "../updates.js";
 import { renderPhone } from "./phone.js";
 
 export async function render(view) {
-  const [status, version] = await Promise.all([api.get("/command/status"), api.get("/version")]);
+  const [status, version, ai] = await Promise.all([api.get("/command/status"), api.get("/version"), api.get("/command/models")]);
   const theme = getTheme();
   view.innerHTML = `
     <div class="page-head"><div><h1>Settings</h1></div></div>
     <div class="settings">
       <section class="card ph-card" id="phone-settings"><p class="muted">Loading phone settings…</p></section>
+      <section class="card" id="ai-models">
+        <h2>AI models</h2>
+        <p>Pick which Claude model each AI feature uses. Cheaper models cost less per request; more capable ones make
+           fewer mistakes on tricky requests. Changes apply to the next request. Your spending is at
+           <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a> → Usage.</p>
+        <div class="ai-roles">${ai.roles.map((r) => `
+          <label class="ai-role">
+            <span class="ai-role-text"><b>${esc(r.name)}</b><span>${esc(r.what)}</span></span>
+            <select data-role="${esc(r.id)}">${ai.models.map((m) => `
+              <option value="${esc(m.id)}" ${m.id === r.model ? "selected" : ""}>${esc(m.name)}${m.id === r.default ? " · recommended" : ""}</option>`).join("")}
+            </select>
+          </label>`).join("")}</div>
+        <ul class="ai-notes">${ai.models.map((m) => `<li><b>${esc(m.name)}</b> (${esc(m.price)} per million tokens in / out): ${esc(m.note)}</li>`).join("")}</ul>
+      </section>
       <section class="card">
         <h2>Appearance</h2>
         <p>Dark is the default command-center look. “System” follows your computer's light/dark setting.</p>
@@ -41,7 +55,7 @@ export async function render(view) {
       <section class="card">
         <h2>Command bar</h2>
         <p>${status.api_key_configured
-          ? `✅ API key found. Using model <code>${esc(status.model)}</code>.`
+          ? `✅ API key found.`
           : `⚠️ No API key yet. Put your key in the <code>.env</code> file (see README step 3), then restart the app.`}</p>
         <p>Your data is stored in <code>data/life.db</code> in the project folder, on your own computer.
            When you use the command bar, your sentence plus a list of your goals and tasks is sent to Anthropic's API so Claude can understand it.</p>
@@ -50,6 +64,12 @@ export async function render(view) {
   renderPhone(view.querySelector("#phone-settings")).catch((err) => {
     view.querySelector("#phone-settings").innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
   });
+  view.querySelectorAll("#ai-models select").forEach((sel) => sel.addEventListener("change", async () => {
+    try {
+      await api.put("/command/models", { role: sel.dataset.role, model: sel.value });
+      toast(`${sel.closest(".ai-role").querySelector("b").textContent} now uses ${sel.selectedOptions[0].textContent.split(" · ")[0]}`);
+    } catch (err) { toast(err.message); }
+  }));
   view.querySelector("#theme").addEventListener("click", (e) => {
     const b = e.target.closest("button");
     if (!b) return;

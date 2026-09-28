@@ -12,7 +12,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-5").strip() or "claude-opus-5"
 DATABASE_PATH = PROJECT_ROOT / os.getenv("DATABASE_PATH", "data/life.db")
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 # Written by updater.py whenever the desktop app installs a new version.

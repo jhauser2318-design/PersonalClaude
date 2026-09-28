@@ -12,7 +12,7 @@ from datetime import date
 
 import anthropic
 
-from ... import config
+from ... import ai_models, config
 from ..assistant.claude_client import AssistantError
 from . import gmail
 
@@ -128,11 +128,8 @@ def ask(question: str, history: list[dict]) -> dict:
         messages = messages[:-1]
     messages.append({"role": "user", "content": f"{intro}\n\n{question}"})
 
-    request = dict(model=config.CLAUDE_MODEL, max_tokens=16000, system=SYSTEM, tools=TOOLS,
-                   output_config={"effort": "medium"})
-    if config.CLAUDE_MODEL == "claude-opus-5":
-        request["betas"] = ["server-side-fallback-2026-07-01"]
-        request["fallbacks"] = "default"
+    # The model is chosen in Settings → AI models (see backend/ai_models.py).
+    request = dict(max_tokens=16000, system=SYSTEM, tools=TOOLS, **ai_models.request_options("email", "medium"))
 
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     state = {"seen": {}, "read": [], "draft": None}
@@ -144,6 +141,8 @@ def ask(question: str, history: list[dict]) -> dict:
             raise AssistantError("Anthropic rejected the API key. Check ANTHROPIC_API_KEY in your .env file.")
         except anthropic.RateLimitError:
             raise AssistantError("Too many requests right now (or your credit ran out). Try again in a minute.")
+        except anthropic.NotFoundError:
+            raise AssistantError(f"Model '{request['model']}' isn't available to your API key. Pick another in Settings → AI models.")
         except anthropic.BadRequestError as e:
             raise AssistantError(f"Claude couldn't process that request: {e.message}")
         except anthropic.APIStatusError as e:

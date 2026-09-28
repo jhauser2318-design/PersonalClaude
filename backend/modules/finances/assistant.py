@@ -13,7 +13,7 @@ from datetime import date, timedelta
 
 import anthropic
 
-from ... import config
+from ... import ai_models, config
 from ...database import get_db
 from ..assistant.claude_client import AssistantError
 from . import service
@@ -22,12 +22,9 @@ MAX_STEPS = 10
 BATCH = 120
 
 
-def _request(**kwargs) -> dict:
-    request = dict(model=config.CLAUDE_MODEL, **kwargs)
-    if config.CLAUDE_MODEL == "claude-opus-5":
-        request["betas"] = ["server-side-fallback-2026-07-01"]
-        request["fallbacks"] = "default"
-    return request
+def _request(role: str, effort: str, output_format: dict | None = None, **kwargs) -> dict:
+    """A request for the model chosen for this feature in Settings → AI models."""
+    return dict(**kwargs, **ai_models.request_options(role, effort, output_format))
 
 
 def _call(client, request: dict):
@@ -37,6 +34,8 @@ def _call(client, request: dict):
         raise AssistantError("Anthropic rejected the API key. Check ANTHROPIC_API_KEY in your .env file.")
     except anthropic.RateLimitError:
         raise AssistantError("Too many requests right now (or your credit ran out). Try again in a minute.")
+    except anthropic.NotFoundError:
+        raise AssistantError(f"Model '{request['model']}' isn't available to your API key. Pick another in Settings → AI models.")
     except anthropic.BadRequestError as e:
         raise AssistantError(f"Claude couldn't process that request: {e.message}")
     except anthropic.APIStatusError as e:
@@ -105,9 +104,9 @@ def categorize(limit_batches: int = 4) -> int:
         lines = [f"{i + 1}. {(t['payee'] + ' | ' if t['payee'] else '')}{t['example'][:90]} | {t['amount']:+.2f} | "
                  f"{t['account_kind']}" for i, t in enumerate(todo)]
         response = _call(client, _request(
+            "categorize", "low", {"type": "json_schema", "schema": CATEGORY_SCHEMA},
             max_tokens=16000, system=CATEGORIZE_SYSTEM,
-            messages=[{"role": "user", "content": "\n".join(lines)}],
-            output_config={"effort": "low", "format": {"type": "json_schema", "schema": CATEGORY_SCHEMA}}))
+            messages=[{"role": "user", "content": "\n".join(lines)}]))
         texts = [b.text for b in response.content if b.type == "text"]
         try:
             items = json.loads(texts[-1])["items"] if texts else []
@@ -296,8 +295,7 @@ def ask(question: str, history: list[dict] | None = None, report: str | None = N
     messages.append({"role": "user", "content": f"<data>\n{context}\n</data>\n\n{task}"})
 
     system = SYSTEM + ("\n\n" + REPORT_STYLE if report else "")
-    request = _request(max_tokens=16000, system=system, tools=TOOLS,
-                       output_config={"effort": "medium"})
+    request = _request("finance", "medium", max_tokens=16000, system=system, tools=TOOLS)
     state = {"changes": []}
     response = None
     for step in range(MAX_STEPS + 1):

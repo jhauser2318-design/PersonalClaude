@@ -150,7 +150,9 @@ Google requires every app that uses Google Calendar to be registered. Because th
    - App name: `Life Control Center`; user support email: your email.
    - Audience: **External**.
    - Contact email: your email. Agree and **Create**.
-5. Go to **Audience** and click **Publish app** → **Confirm**. (If you leave it in "Testing", Google disconnects the app every 7 days. Publishing doesn't make anything public: only people with your client file could even try to use it.)
+5. Go to **Audience** and click **Publish app** → **Confirm**. If Google says you must first complete the **Branding** page, open **Branding**, fill in only the app name, user support email and developer contact email (no logo), save, and try again.
+   - **If Google still won't let you publish**, add your email under **Audience → Test users** instead. Everything works the same, except that Google disconnects the app every 7 days. When that happens, the Calendar page shows a one-click **Connect** button.
+   - Publishing doesn't make anything public: only people with your client file could even try to use it.
 6. Go to **Clients** (or **Credentials → Create credentials → OAuth client ID**) → **Create client**:
    - Application type: **Web application**. Name: `Life Control Center`.
    - Under **Authorized redirect URIs**, click **Add URI** and paste exactly:

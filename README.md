@@ -10,7 +10,7 @@ A personal dashboard that runs on your own computer and opens in your web browse
 - **Dashboard**: progress for each area, what's due today and this week, overdue items, and recent updates.
 - **Live command bar**: type normal sentences and Claude (Anthropic's AI) makes the changes for you. Every change can be undone.
 
-The sidebar already has spots for **Calendar, Finances, Email and Follow-ups**. They say "Coming soon" and will be built in later phases.
+The sidebar already has spots for **Calendar, Finances, Email, Follow-ups and Shopping list**. They say "Coming soon" and will be built in later phases.
 
 ---
 

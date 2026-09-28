@@ -19,11 +19,11 @@ from ..goals.service import ValidationError, now_iso
 CATEGORIES = [
     "Income", "Housing", "Utilities & Phone", "Groceries", "Dining & Coffee", "Transportation", "Gas",
     "Shopping", "Entertainment", "Subscriptions", "Health & Fitness", "Personal Care", "Travel",
-    "Education", "Insurance", "Fees & Interest", "Gifts & Donations", "Other", "Transfer",
+    "Education", "Insurance", "Debt Payments", "Fees & Interest", "Gifts & Donations", "Other", "Transfer",
 ]
 SPENDING_CATEGORIES = [c for c in CATEGORIES if c not in ("Income", "Transfer")]
 UNCATEGORIZED = "Uncategorized"
-KINDS = ["checking", "savings", "credit", "other"]
+KINDS = ["checking", "savings", "credit", "loan", "other"]
 
 register_schema(
     """
@@ -75,6 +75,19 @@ register_schema(
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS fin_loans (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT NOT NULL,
+        lender     TEXT NOT NULL DEFAULT '',
+        account_id TEXT,                         -- a linked SimpleFIN loan account (balance comes from it)
+        balance    REAL NOT NULL DEFAULT 0,      -- used when not linked
+        apr        REAL NOT NULL DEFAULT 0,      -- yearly interest rate, %
+        payment    REAL NOT NULL DEFAULT 0,      -- monthly payment
+        due_day    INTEGER,
+        notes      TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS fin_balance_history (
         date       TEXT NOT NULL,                -- YYYY-MM-DD
         account_id TEXT NOT NULL,
@@ -86,7 +99,10 @@ register_schema(
 
 # The category that counts for a transaction: your own choice, then "Transfer"
 # for matched pairs, then the merchant's category.
-EFFECTIVE = ("CASE WHEN t.category IS NOT NULL THEN t.category "
+# Activity inside a loan account (the payment arriving, interest added) just
+# mirrors money you already paid from checking, so it's never income or spending.
+EFFECTIVE = ("CASE WHEN a.kind = 'loan' THEN 'Transfer' "
+             "WHEN t.category IS NOT NULL THEN t.category "
              "WHEN t.transfer_with IS NOT NULL THEN 'Transfer' "
              f"ELSE COALESCE(m.category, '{UNCATEGORIZED}') END")
 TX_SELECT = f"""
@@ -118,6 +134,8 @@ def merchant_key(description: str, payee: str, amount: float) -> str:
 
 def _guess_kind(org: str, name: str, balance: float) -> str:
     text = f"{org} {name}".lower()
+    if re.search(r"\bloan\b|student|mortgage|auto loan|personal loan", text):
+        return "loan"
     if re.search(r"credit|card|visa|mastercard|amex|quicksilver|savor|venture|platinum|discover it", text):
         return "credit"
     if "saving" in text or "money market" in text:
@@ -210,9 +228,12 @@ def store_sync(conn, accounts: list[dict]) -> dict:
 def match_transfers(conn) -> int:
     """Pair up money moving between your own accounts (e.g. a card payment
     leaving checking and arriving at the card within a few days)."""
+    # Loan payments stay as "Debt Payments" spending on the checking side, so
+    # they aren't paired away as transfers.
     rows = conn.execute(
-        "SELECT id, account_id, posted, amount FROM fin_transactions "
-        "WHERE transfer_with IS NULL AND category IS NULL AND pending = 0 AND posted >= ? ORDER BY posted",
+        "SELECT t.id, t.account_id, t.posted, t.amount FROM fin_transactions t JOIN fin_accounts a ON a.id = t.account_id "
+        "WHERE t.transfer_with IS NULL AND t.category IS NULL AND t.pending = 0 AND t.posted >= ? AND a.kind != 'loan' "
+        "ORDER BY t.posted",
         ((date.today() - timedelta(days=120)).isoformat(),)).fetchall()
     outs = [r for r in rows if r["amount"] < 0]
     ins = [r for r in rows if r["amount"] > 0]
@@ -291,9 +312,11 @@ def balances(conn) -> dict:
     for a in list_accounts(conn, include_hidden=False):
         if a["kind"] == "credit":
             debt += -a["balance"]  # what you owe (negative balance = owed)
-        else:
+        elif a["kind"] != "loan":
             cash += a["balance"]
-    return {"cash": round(cash, 2), "debt": round(debt, 2), "net": round(cash - debt, 2)}
+    loans = sum(l["balance"] for l in list_loans(conn))
+    return {"cash": round(cash, 2), "debt": round(debt, 2), "loans": round(loans, 2),
+            "net": round(cash - debt - loans, 2)}
 
 
 # ---------------------------------------------------------------------------
@@ -689,18 +712,205 @@ def day_summary(conn, day: str | None = None) -> dict:
     avg_spend = round(sum(r["spending"] for r in before) / len(before), 2) if before else 0.0
     month_start = d.replace(day=1).isoformat()
     txs = list_transactions(conn, start=day, end=day, limit=500)
+    day_totals = totals(conn, day, day)
+    rate = income_rate(conn, day)
+    mtd = totals(conn, month_start, day)
+    earned_mtd = round(rate["daily"] * d.day, 2)
     return {
         "date": day,
-        **totals(conn, day, day),
+        **day_totals,
+        # Income spread evenly over the days it covers (a paycheck every 2 weeks
+        # counts as 1/14 per day), so every day's net is comparable.
+        "income_rate": rate,
+        "earned": rate["daily"],
+        "net_normalized": round(rate["daily"] - day_totals["spending"], 2),
         "avg_daily_spending": avg_spend,
         "categories": spending_by_category(conn, day, day),
         "income_items": [t for t in txs if t["category"] == "Income"],
         "transactions": txs,
-        "month_to_date": {**totals(conn, month_start, day), "days": d.day},
+        "month_to_date": {**mtd, "days": d.day, "earned": earned_mtd,
+                          "net_normalized": round(earned_mtd - mtd["spending"], 2)},
         "cash": cash_change(conn, day),
         "series": series,
         "first_date": conn.execute("SELECT MIN(posted) AS d FROM fin_transactions").fetchone()["d"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Income per day (for the Daily view)
+# ---------------------------------------------------------------------------
+
+def income_rate(conn, as_of: str | None = None) -> dict:
+    """Your income per day. Uses the monthly amount you set, if any; otherwise
+    regular deposits (paychecks) count as amount ÷ days between them, and
+    irregular income is averaged over the last 90 days."""
+    as_of = as_of or date.today().isoformat()
+    manual = get_setting(conn, "fin_income_monthly")
+    if manual:
+        monthly = float(manual)
+        return {"daily": round(monthly * 12 / 365, 2), "monthly": round(monthly, 2), "source": "set", "streams": []}
+    end = date.fromisoformat(as_of)
+    start = end - timedelta(days=120)
+    rows = conn.execute(
+        f"""SELECT t.merchant_key, t.posted, t.amount,
+                   COALESCE(NULLIF(m.name, ''), NULLIF(t.payee, ''), t.description) AS merchant
+            FROM fin_transactions t LEFT JOIN fin_merchants m ON m.key = t.merchant_key
+            JOIN fin_accounts a ON a.id = t.account_id
+            WHERE a.hidden = 0 AND {EFFECTIVE} = 'Income' AND t.amount > 0 AND t.posted BETWEEN ? AND ?
+            ORDER BY t.posted""", (start.isoformat(), as_of)).fetchall()
+    groups: dict[str, list] = {}
+    for r in rows:
+        groups.setdefault(r["merchant_key"], []).append(r)
+    daily, streams, irregular = 0.0, [], 0.0
+    first = conn.execute("SELECT MIN(posted) AS d FROM fin_transactions").fetchone()["d"]
+    window_start = max(end - timedelta(days=89), date.fromisoformat(first) if first else end)
+    window_days = max(1, (end - window_start).days + 1)
+    for items in groups.values():
+        gaps = [(date.fromisoformat(b["posted"]) - date.fromisoformat(a["posted"])).days for a, b in zip(items, items[1:])]
+        avg_gap = sum(gaps) / len(gaps) if gaps else 0
+        if len(items) >= 2 and 6 <= avg_gap <= 35:
+            recent = items[-3:]
+            amount = sum(i["amount"] for i in recent) / len(recent)
+            per_day = amount / avg_gap
+            daily += per_day
+            every = "week" if avg_gap < 9 else "2 weeks" if avg_gap < 17 else "half month" if avg_gap < 20 else "month"
+            streams.append({"name": items[-1]["merchant"], "amount": round(amount, 2), "every": every,
+                            "per_day": round(per_day, 2)})
+        else:
+            irregular += sum(i["amount"] for i in items if i["posted"] >= window_start.isoformat())
+    if irregular:
+        daily += irregular / window_days
+        streams.append({"name": "Other income (averaged)", "amount": round(irregular, 2),
+                        "every": f"{window_days} days", "per_day": round(irregular / window_days, 2)})
+    return {"daily": round(daily, 2), "monthly": round(daily * 365 / 12, 2), "source": "auto", "streams": streams}
+
+
+def set_income_monthly(conn, amount: float | None) -> dict:
+    if amount is None or amount <= 0:
+        conn.execute("DELETE FROM app_settings WHERE key = 'fin_income_monthly'")
+    else:
+        set_setting(conn, "fin_income_monthly", str(round(float(amount), 2)))
+    return income_rate(conn)
+
+
+# ---------------------------------------------------------------------------
+# Loans and payoff forecasts
+# ---------------------------------------------------------------------------
+
+def _loan_row(conn, row) -> dict:
+    d = dict(row)
+    d["linked"] = False
+    if d.get("account_id"):
+        acc = conn.execute("SELECT * FROM fin_accounts WHERE id = ?", (d["account_id"],)).fetchone()
+        if acc:
+            d["balance"] = round(abs(acc["balance"]), 2)
+            d["linked"] = True
+            d["balance_date"] = acc["balance_date"]
+    return d
+
+
+def list_loans(conn) -> list[dict]:
+    """Your loans, plus linked loan accounts that don't have details yet."""
+    loans = [_loan_row(conn, r) for r in conn.execute("SELECT * FROM fin_loans ORDER BY id")]
+    linked = {l["account_id"] for l in loans if l.get("account_id")}
+    for a in conn.execute("SELECT * FROM fin_accounts WHERE kind = 'loan' AND hidden = 0").fetchall():
+        if a["id"] not in linked:
+            loans.append({"id": None, "name": a["nickname"] or a["name"], "lender": a["org"], "account_id": a["id"],
+                          "balance": round(abs(a["balance"]), 2), "apr": 0, "payment": 0, "due_day": None,
+                          "notes": "", "linked": True, "needs_details": True, "balance_date": a["balance_date"]})
+    return loans
+
+
+def _clean_loan(fields: dict) -> dict:
+    out = {}
+    for key in ("name", "lender", "account_id", "balance", "apr", "payment", "due_day", "notes"):
+        if key not in fields:
+            continue
+        v = fields[key]
+        if key in ("name", "lender", "notes"):
+            v = (v or "").strip()
+        elif key == "account_id":
+            v = v or None
+        elif key in ("balance", "apr", "payment"):
+            v = float(v or 0)
+            if v < 0 or (key == "apr" and v > 60):
+                raise ValidationError("Check the numbers: balance and payment can't be negative, and APR is a yearly % like 5.5.")
+        elif key == "due_day":
+            v = int(v) if v not in (None, "") else None
+            if v is not None and not 1 <= v <= 31:
+                raise ValidationError("Due day is a day of the month, 1-31.")
+        out[key] = v
+    return out
+
+
+def save_loan(conn, fields: dict, loan_id: int | None = None) -> dict:
+    data = _clean_loan(fields)
+    ts = now_iso()
+    if loan_id is None:
+        if not data.get("name"):
+            raise ValidationError("Give the loan a name, e.g. “SoFi student loan”.")
+        cols = list(data) + ["created_at", "updated_at"]
+        cur = conn.execute(f"INSERT INTO fin_loans ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})",
+                           [*data.values(), ts, ts])
+        loan_id = cur.lastrowid
+    else:
+        if not conn.execute("SELECT 1 FROM fin_loans WHERE id = ?", (loan_id,)).fetchone():
+            raise ValidationError("That loan doesn't exist.")
+        if data:
+            conn.execute(f"UPDATE fin_loans SET {', '.join(f'{k} = ?' for k in data)}, updated_at = ? WHERE id = ?",
+                         [*data.values(), ts, loan_id])
+    return _loan_row(conn, conn.execute("SELECT * FROM fin_loans WHERE id = ?", (loan_id,)).fetchone())
+
+
+def delete_loan(conn, loan_id: int) -> None:
+    conn.execute("DELETE FROM fin_loans WHERE id = ?", (loan_id,))
+
+
+def get_loan(conn, loan_id: int) -> dict:
+    row = conn.execute("SELECT * FROM fin_loans WHERE id = ?", (loan_id,)).fetchone()
+    if not row:
+        raise ValidationError("That loan doesn't exist.")
+    return _loan_row(conn, row)
+
+
+def _add_months(d: date, n: int) -> date:
+    y, m = divmod(d.month - 1 + n, 12)
+    return date(d.year + y, m + 1, min(d.day, cal.monthrange(d.year + y, m + 1)[1]))
+
+
+def amortize(balance: float, apr: float, payment: float, extra: float = 0.0, lump: float = 0.0,
+             max_months: int = 600) -> dict:
+    """Month-by-month payoff: interest accrues monthly (APR ÷ 12), then the payment applies."""
+    bal = max(0.0, balance - lump)
+    rate = apr / 100 / 12
+    pay = payment + extra
+    schedule = [round(bal, 2)]
+    months, interest = 0, 0.0
+    if bal > 0 and pay <= bal * rate:
+        return {"months": None, "never": True, "total_interest": None, "payoff": None, "schedule": schedule,
+                "monthly_payment": round(pay, 2)}
+    while bal > 0.005 and months < max_months:
+        i = bal * rate
+        interest += i
+        bal = bal + i - pay
+        months += 1
+        schedule.append(round(max(bal, 0.0), 2))
+    payoff = _add_months(date.today().replace(day=1), months) if months else date.today()
+    return {"months": months, "never": False, "total_interest": round(interest, 2),
+            "payoff": payoff.strftime("%Y-%m"), "schedule": schedule, "monthly_payment": round(pay, 2)}
+
+
+def loan_forecast(conn, loan_id: int, extra: float = 0.0, lump: float = 0.0) -> dict:
+    loan = get_loan(conn, loan_id)
+    if not loan["payment"]:
+        raise ValidationError("Add the monthly payment to see a forecast.")
+    base = amortize(loan["balance"], loan["apr"], loan["payment"])
+    plan = amortize(loan["balance"], loan["apr"], loan["payment"], max(0.0, extra), max(0.0, lump))
+    out = {"loan": loan, "baseline": base, "scenario": plan, "extra": extra, "lump": lump}
+    if not base["never"] and not plan["never"]:
+        out["months_saved"] = base["months"] - plan["months"]
+        out["interest_saved"] = round(base["total_interest"] - plan["total_interest"], 2)
+    return out
 
 
 def overview(conn) -> dict:
@@ -712,6 +922,6 @@ def overview(conn) -> dict:
         "recurring": recurring(conn),
         "uncategorized": conn.execute(
             f"SELECT COUNT(*) AS n FROM fin_transactions t LEFT JOIN fin_merchants m ON m.key = t.merchant_key "
-            f"WHERE {EFFECTIVE} = '{UNCATEGORIZED}'").fetchone()["n"],
+            f"JOIN fin_accounts a ON a.id = t.account_id WHERE {EFFECTIVE} = '{UNCATEGORIZED}'").fetchone()["n"],
         "first_date": conn.execute("SELECT MIN(posted) AS d FROM fin_transactions").fetchone()["d"],
     }

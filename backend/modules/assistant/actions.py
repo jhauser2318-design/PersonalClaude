@@ -250,6 +250,8 @@ def _apply(conn, actions: list[dict], undo: list[dict]) -> tuple[list[dict], lis
                 if not fields["name"]:
                     raise ValidationError("I couldn't read the item's name from that link. "
                                           "Say what it is, e.g. “add the Sony headphones to my wants: <link>”.")
+            if fields["category"] == "need":
+                fields["price"] = None  # needs are a checklist: no price
             item = shopping.create_item(conn, {k: v for k, v in fields.items() if v is not None})
             undo.append({"kind": "shopping", "id": item["id"], "before": None})
             price = f", ${item['price']:,.2f}" if item["price"] is not None else ""

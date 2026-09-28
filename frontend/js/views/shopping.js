@@ -11,6 +11,7 @@ function domain(url) {
 }
 
 function itemRow(it) {
+  const isNeed = it.category === "need"; // needs are a checklist: no price
   return `
     <li class="shop-item ${it.bought ? "bought" : ""}" data-id="${it.id}">
       <input type="checkbox" class="check" ${it.bought ? "checked" : ""} aria-label="Mark “${esc(it.name)}” as bought">
@@ -22,7 +23,7 @@ function itemRow(it) {
           ${it.bought && it.bought_at ? `<span>Bought ${esc(fmtDate(it.bought_at.slice(0, 10)))}</span>` : ""}
         </div>
       </div>
-      <div class="shop-price">${it.price != null ? esc(money(it.price)) : `<span class="muted">no price</span>`}</div>
+      ${isNeed ? "" : `<div class="shop-price">${it.price != null ? esc(money(it.price)) : `<span class="muted">no price</span>`}</div>`}
       <div class="t-actions">
         <button class="icon-btn" data-edit aria-label="Edit">${icon("edit")}</button>
         <button class="icon-btn danger" data-delete aria-label="Delete">${icon("trash")}</button>
@@ -32,16 +33,21 @@ function itemRow(it) {
 
 function column(kind, items, total) {
   const label = kind === "need" ? "Needs" : "Wants";
-  const hint = kind === "need" ? "Essentials and replacements" : "Nice-to-haves";
+  const hint = kind === "need" ? "Essentials to pick up: tick them off" : "Nice-to-haves, with prices";
   return `
     <section class="card shop-col shop-${kind}">
       <header class="shop-head">
         <div><h2>${label}</h2><div class="eyebrow">${hint}</div></div>
-        <div class="shop-total"><span class="eyebrow">Total</span><b>${esc(money(total))}</b></div>
+        ${kind === "need"
+          ? `<div class="shop-total"><span class="eyebrow">To get</span><b>${items.length}</b></div>`
+          : `<div class="shop-total"><span class="eyebrow">Total</span><b>${esc(money(total))}</b></div>`}
         <button class="icon-btn" data-add="${kind}" aria-label="Add a ${kind}">${icon("plus")}</button>
       </header>
+      ${kind === "need" ? `<form class="shop-quick" data-quick>
+        <input type="text" name="name" placeholder="Add a need… (press Enter)" aria-label="Add a need" autocomplete="off">
+      </form>` : ""}
       ${items.length ? `<ul class="shop-list">${items.map(itemRow).join("")}</ul>`
-        : `<div class="empty">No ${label.toLowerCase()} yet.</div>`}
+        : `<div class="empty">${kind === "need" ? "All done. Nothing to pick up." : "No wants yet."}</div>`}
     </section>`;
 }
 
@@ -57,10 +63,9 @@ export async function render(view) {
       <div class="eyebrow">Needs &amp; wants</div>
       <h1>Shopping list</h1>
       <div class="status-chips">
-        <span class="status-chip"><span class="dot" style="--c:var(--accent-2)"></span>needs <b>${esc(money(totals.need))}</b></span>
+        <span class="status-chip"><span class="dot" style="--c:var(--accent-2)"></span><b>${totals.need_count}</b> need${totals.need_count === 1 ? "" : "s"} to get</span>
         <span class="status-chip"><span class="dot" style="--c:#c084fc"></span>wants <b>${esc(money(totals.want))}</b></span>
-        <span class="status-chip"><span class="dot" style="--c:var(--success)"></span><b>${open.length}</b> to buy</span>
-        ${totals.unpriced ? `<span class="status-chip"><span class="dot" style="--c:var(--warning)"></span><b>${totals.unpriced}</b> without a price</span>` : ""}
+        ${totals.unpriced ? `<span class="status-chip"><span class="dot" style="--c:var(--warning)"></span><b>${totals.unpriced}</b> want${totals.unpriced === 1 ? "" : "s"} without a price</span>` : ""}
       </div></div>
       <button class="btn primary" id="add-item">${icon("plus")} Add item</button></div>
     <p class="sub" style="margin:-8px 0 18px;color:var(--text-3)">Tip: paste a store link into the AI bar, e.g. “Add this to my wants: https://…”, and it fills in the name and price when the store allows it.</p>
@@ -92,6 +97,17 @@ export async function render(view) {
       return refresh();
     }
     if (e.target.closest("[data-edit]") || e.target.closest(".shop-main")) openItemEditor(it, refresh);
+  });
+  root.querySelector("[data-quick]")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = e.target.name.value.trim();
+    if (!name) return;
+    try {
+      await api.post("/shopping", { name, category: "need" });
+      toast(`Added “${name}”`);
+      await render(view);
+      view.querySelector("[data-quick] input")?.focus(); // keep typing the next one
+    } catch (err) { toast(err.message); }
   });
   root.addEventListener("change", async (e) => {
     if (!e.target.matches(".shop-item .check")) return;
@@ -137,7 +153,11 @@ export function openItemEditor(it = {}, onChange) {
       <button class="btn primary" type="submit" form="item-form">${isNew ? "Add" : "Save"}</button></div>`,
   });
   const form = dlg.querySelector("form");
-  const showCat = () => dlg.querySelectorAll("#category button").forEach((b) => b.classList.toggle("active", b.dataset.cat === category));
+  const priceField = form.price.closest(".field");
+  const showCat = () => {
+    dlg.querySelectorAll("#category button").forEach((b) => b.classList.toggle("active", b.dataset.cat === category));
+    priceField.hidden = category === "need"; // needs are a checklist: no price
+  };
   dlg.querySelector("#category").onclick = (e) => { const b = e.target.closest("button"); if (b) { category = b.dataset.cat; showCat(); } };
   showCat();
   dlg.querySelector("#lookup").onclick = async (e) => {
@@ -166,7 +186,7 @@ export function openItemEditor(it = {}, onChange) {
       name: form.name.value.trim(),
       description: form.description.value.trim(),
       category,
-      price: form.price.value === "" ? null : Number(form.price.value),
+      price: category === "need" || form.price.value === "" ? null : Number(form.price.value),
       url: form.url.value.trim(),
     };
     try {

@@ -73,13 +73,15 @@ def list_items(conn) -> list[dict]:
 
 
 def totals(conn) -> dict:
-    """Sum of prices still to buy, per category (items without a price don't count)."""
-    out = {"need": 0.0, "want": 0.0, "unpriced": 0}
+    """What's still to get. Needs are a simple checklist (a count, prices don't
+    matter); wants add up their prices (wants without a price are counted)."""
+    out = {"need": 0.0, "want": 0.0, "unpriced": 0, "need_count": 0, "want_count": 0}
     for r in conn.execute("SELECT category, price FROM shopping_items WHERE bought = 0").fetchall():
-        if r["price"] is None:
-            out["unpriced"] += 1
-        else:
+        out[f"{r['category']}_count"] += 1
+        if r["price"] is not None:
             out[r["category"]] += r["price"]
+        elif r["category"] == "want":
+            out["unpriced"] += 1
     out["need"], out["want"] = round(out["need"], 2), round(out["want"], 2)
     return out
 

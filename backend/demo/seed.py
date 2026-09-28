@@ -108,9 +108,12 @@ def seed(conn) -> None:
         ("Noise-canceling headphones", "For the flight and the office", "want", 249.00, False),
         ("Standing desk mat", "Home office", "want", 49.95, False),
         ("CPA FAR flashcards", "Pocket review cards", "need", 34.00, True),
+        ("Paper towels", "", "need", None, False),
+        ("Protein powder", "", "need", None, False),
         ("Espresso machine", "Nice-to-have for weekend mornings", "want", 399.00, False),
     ]:
-        item = shopping.create_item(conn, {"name": name, "description": desc, "category": cat, "price": price})
+        item = shopping.create_item(conn, {"name": name, "description": desc, "category": cat,
+                                           "price": price if cat == "want" else None})
         if bought:
             shopping.update_item(conn, item["id"], {"bought": True})
 

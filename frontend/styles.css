@@ -560,6 +560,8 @@ a.btn { text-decoration: none; color: inherit; }
 .shop-item:hover .t-actions, .shop-item:focus-within .t-actions { opacity: 1; }
 .shop-item.bought .shop-name { text-decoration: line-through; color: var(--text-3); }
 .shop-bought { margin-top: 20px; }
+.shop-quick { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.shop-quick input { width: 100%; }
 .shop-bought summary { cursor: pointer; font: 600 11.5px var(--font-mono); text-transform: uppercase; letter-spacing: .14em; color: var(--text-2); padding: 6px 0 12px; }
 .shop-bought .count { color: var(--text-3); }
 @media (max-width: 860px) {

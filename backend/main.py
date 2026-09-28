@@ -5,6 +5,8 @@ Start it from the project folder with:
 then open http://localhost:8000 in your browser.
 """
 import json
+import os
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -18,6 +20,8 @@ from .modules import MODULES
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    RUNNING["version"] = _read_version().get("sha")
+    RUNNING["last_ping"] = time.time()
     init_db()
     with get_db() as conn:
         for module in MODULES:
@@ -53,6 +57,27 @@ for module in MODULES:
 @app.get("/api/areas")
 def list_areas():
     return AREAS
+
+
+# Which version this running copy of the app started with, and when an open
+# app window last checked in. The desktop launcher uses both: to spot an old
+# copy still running after an update, and to shut down once the window closes.
+RUNNING = {"version": None, "last_ping": 0.0}
+
+
+def seconds_since_ping() -> float:
+    return time.time() - RUNNING["last_ping"]
+
+
+@app.get("/api/app/info")
+def app_info():
+    return {"version": RUNNING["version"], "pid": os.getpid()}
+
+
+@app.post("/api/app/ping")
+def app_ping():
+    RUNNING["last_ping"] = time.time()
+    return {"ok": True}
 
 
 def _read_version() -> dict:

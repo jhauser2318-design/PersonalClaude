@@ -53,7 +53,7 @@ async function route() {
     else { location.hash = "#/dashboard"; return; }
   } catch (err) {
     view.innerHTML = `<div class="card empty">Something went wrong loading this page: ${esc(err.message)}<br>
-      Is the app still running in your terminal window?</div>`;
+      Try closing this window and opening the app again from the Desktop icon.</div>`;
   }
 }
 
@@ -214,6 +214,25 @@ async function start() {
   route();
   updateBadge();
   announceUpdate();
+  keepAlive();
+}
+
+// Tell the app this window is still open (every 15 seconds). The desktop
+// launcher shuts the app down a few minutes after these check-ins stop.
+function keepAlive() {
+  let failures = 0;
+  const ping = async () => {
+    try {
+      await api.post("/app/ping");
+      failures = 0;
+      $("#offline-notice").hidden = true;
+    } catch (e) {
+      failures += 1;
+      if (failures >= 2) $("#offline-notice").hidden = false;
+    }
+  };
+  ping();
+  setInterval(ping, 15000);
 }
 
 // After the desktop app installs a new version, say so once.

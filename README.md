@@ -55,7 +55,7 @@ After this, you can delete the ZIP and the extracted folder. The app lives in `C
 
 **Double-click the Life Control Center icon on your Desktop** (or find it in the Start menu). The app opens in **its own window**, like any other program: no browser tabs, no address bar.
 
-- **Closing the window closes the app.** Nothing keeps running in the background.
+- **Closing the window closes the app.** It shuts itself down within a few minutes of the window closing, so nothing keeps running in the background.
 - **Pin it** so it's one click away: right-click the Desktop icon, choose **Show more options → Pin to taskbar** (or **Pin to Start**).
 - Behind the scenes, the window shows the page at http://localhost:8000. (`localhost` means "this computer": the app isn't on the internet, and nobody else can see it.)
 - The window uses Microsoft Edge, which comes with Windows (or Google Chrome if Edge is missing). It keeps its own settings, separate from your normal browser.
@@ -159,6 +159,7 @@ The first time you start the app, it adds one example goal per life area plus a 
 | *"Too many requests… or your credit ran out"* | Wait a minute, or add credit under **Billing** in the Anthropic Console. |
 | `address already in use` / port 8000 busy | Another program is using port 8000. Change `8000` to `8001` (in two places) in `start.bat`, then open http://localhost:8001. |
 | The page says it can't reach the backend, or http://localhost:8000 won't load | The app isn't running. Double-click the Desktop icon. |
+| Some pages say *"Something went wrong loading this page: Not Found"* | An older copy of the app was still running in the background. Restart your computer, then open the app from the Desktop icon. (Newer versions detect and replace an old running copy automatically.) |
 | Double-clicking the icon does nothing, or an error box appears | Look in `C:\Users\<you>\LifeControlCenter\data\app.log` for details, or double-click `start.bat` in that folder to see the app's messages as it starts. |
 
 ---

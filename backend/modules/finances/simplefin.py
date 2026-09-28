@@ -21,7 +21,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from ... import config
+from ... import config, net
 from ...database import demo_on
 
 DATA_FILE = config.PROJECT_ROOT / "data" / "simplefin.json"
@@ -47,7 +47,7 @@ def http_request(method: str, url: str, *, auth: str | None = None, timeout: int
     data = b"" if method == "POST" else None
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with net.urlopen(req, timeout=timeout) as resp:
             return resp.status, resp.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode("utf-8", "replace")

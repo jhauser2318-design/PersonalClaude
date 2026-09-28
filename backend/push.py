@@ -21,6 +21,7 @@ import urllib.request
 from datetime import datetime
 from urllib.parse import urlparse
 
+from . import net
 from .database import get_setting, register_schema, set_setting
 
 log = logging.getLogger("push")
@@ -163,7 +164,7 @@ def _post(endpoint: str, body: bytes, headers: dict) -> tuple[int, str]:
     """POST to the push service. Returns (status, the service's reason text if it refused)."""
     req = urllib.request.Request(endpoint, data=body, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=20) as res:
+        with net.urlopen(req, timeout=20) as res:
             return res.status, ""
     except urllib.error.HTTPError as e:
         try:
@@ -177,6 +178,9 @@ def _post(endpoint: str, body: bytes, headers: dict) -> tuple[int, str]:
 def explain(status: int, reason: str) -> str:
     """A plain-English reason a push didn't go through."""
     r = (reason or "").lower()
+    if status == 0 and "certificate" in r:
+        return (f"The PC couldn't confirm it was talking to the real Apple push service ({reason}). "
+                "Click Check for updates; if it keeps happening, antivirus “HTTPS scanning” may be interfering.")
     if status == 0:
         return (f"The PC couldn't reach Apple's push service ({reason}). Check the PC's internet connection, "
                 "and that antivirus or a firewall isn't blocking Python from web.push.apple.com.")

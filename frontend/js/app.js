@@ -4,6 +4,7 @@ import { icon } from "./icons.js";
 import { EXTRA_ROUTES, MODULES } from "./modules.js";
 import { setAreas, state } from "./state.js";
 import { esc, toast } from "./ui.js";
+import { checkForUpdates, updateState } from "./updates.js";
 import * as comingSoon from "./views/coming-soon.js";
 
 const $ = (sel) => document.querySelector(sel);
@@ -24,7 +25,9 @@ function buildNav() {
     <div class="nav-section eyebrow">Coming soon</div>
     ${soon.map((m) => link(`#/${m.id}`, `${icon(m.icon)}${esc(m.label)}<span class="soon">Soon</span>`, "disabled")).join("")}
     <div class="nav-section"></div>
-    ${link("#/settings", `${icon("settings")}Settings`)}`;
+    ${link("#/settings", `${icon("settings")}Settings`)}
+    <button class="nav-link nav-button" id="check-updates">${icon("refresh")}Check for updates</button>`;
+  $("#check-updates").onclick = (e) => checkForUpdates(e.currentTarget);
 }
 
 function highlightNav() {
@@ -223,18 +226,26 @@ async function start() {
 // launcher shuts the app down a few minutes after these check-ins stop.
 function keepAlive() {
   let failures = 0;
+  let loadedVersion; // the app version this window was loaded from
   const ping = async () => {
     try {
-      await api.post("/app/ping");
+      const r = await api.post("/app/ping");
       failures = 0;
-      $("#offline-notice").hidden = true;
+      if (loadedVersion === undefined) loadedVersion = r.version;
+      else if (r.version !== loadedVersion) {
+        location.reload(); // the app restarted on a new version: show the new screens
+        return;
+      }
+      if (!updateState.installing) $("#offline-notice").hidden = true;
     } catch (e) {
       failures += 1;
-      if (failures >= 2) $("#offline-notice").hidden = false;
+      if (failures >= 2 && !updateState.installing) $("#offline-notice").hidden = false;
     }
   };
   ping();
-  setInterval(ping, 15000);
+  setInterval(() => ping(), 15000);
+  // While an update is installing, check more often so the refresh is quick.
+  setInterval(() => { if (updateState.installing) ping(); }, 2000);
 }
 
 // After the desktop app installs a new version, say so once.

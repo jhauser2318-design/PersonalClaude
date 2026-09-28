@@ -5,7 +5,8 @@ console window). It:
   1. opens the app's own window (Microsoft Edge or Google Chrome "app mode":
      no tabs or address bar, so it looks like a normal program), showing a
      "Starting..." screen,
-  2. checks GitHub for a newer version and installs it (see updater.py),
+  2. checks GitHub for a newer version and installs it (see updater.py);
+     this happens on every click, even if the app is already running,
   3. starts the app's server quietly in the background; the window switches
      to the app as soon as it's ready,
   4. shuts the server down a few minutes after you close that window (the
@@ -155,16 +156,32 @@ def main() -> None:
 
     browser = find_browser()
 
+    # 1. Show the window straight away with a "Checking for updates..." screen.
+    #    (If the app is already running, it switches to it as soon as the
+    #    update check below is done.)
+    if browser and not AFTER_UPDATE:
+        open_window(browser, SPLASH.as_uri())
+
+    # 2. Check GitHub for a newer version: every time you click the icon,
+    #    even if the app is already running.
+    if not AFTER_UPDATE:
+        import updater
+        result = updater.update()
+        if result["launcher_changed"]:
+            # The launcher itself changed: restart it so the new code runs.
+            logging.info("Launcher updated; restarting it")
+            subprocess.Popen([sys.executable, str(ROOT / "launcher.pyw")], cwd=ROOT,
+                             env={**os.environ, "LCC_AFTER_UPDATE": "1"})
+            return
+
+    # 3. If the app is already running, keep it only if it's the current version.
     if server_is_up():
         info = server_info()
         if info is not None and info.get("version") == installed_version():
-            # The current version is already running: just open another window.
-            if browser:
-                open_window(browser, URL)
-            else:
+            if browser is None:
                 webbrowser.open(URL)
-            return
-        logging.info("An older copy of the app is still running (%s); stopping it", info)
+            return  # the window opened above switches to the running app
+        logging.info("An older copy of the app is running (%s); restarting it", info)
         stop_old_server(info)
         if server_is_up():
             show_error("An older copy of Life Control Center is still running and couldn't be "
@@ -180,22 +197,7 @@ def main() -> None:
     if lock is None:
         return  # another click is starting the app right now
 
-    # 1. Show the window straight away, with a "Starting..." screen.
-    if browser and not AFTER_UPDATE:
-        open_window(browser, SPLASH.as_uri())
-
-    # 2. Get the newest version from GitHub.
-    if not AFTER_UPDATE:
-        import updater
-        if updater.update():
-            # The launcher itself changed: restart it so the new code runs.
-            logging.info("Launcher updated; restarting it")
-            lock.close()
-            subprocess.Popen([sys.executable, str(ROOT / "launcher.pyw")], cwd=ROOT,
-                             env={**os.environ, "LCC_AFTER_UPDATE": "1"})
-            return
-
-    # 3. Start the app.
+    # 4. Start the app.
     try:
         server, thread = start_server()
     except Exception as e:
@@ -216,7 +218,7 @@ def main() -> None:
         thread.join()  # keeps running until you sign out or restart
         return
 
-    # 4. Keep running while the window is open. It checks in every 15 seconds
+    # 5. Keep running while the window is open. It checks in every 15 seconds
     #    (at least once a minute when minimized); after IDLE_LIMIT seconds of
     #    silence the window must be closed, so stop the app.
     from backend.main import seconds_since_ping

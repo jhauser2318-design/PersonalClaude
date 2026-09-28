@@ -7,6 +7,7 @@ import * as calendar from "./views/calendar.js";
 import * as dashboard from "./views/dashboard.js";
 import * as email from "./views/email.js";
 import * as finances from "./views/finances.js";
+import * as followups from "./views/followups.js";
 import * as goals from "./views/goals.js";
 import * as routines from "./views/routines.js";
 import * as settings from "./views/settings.js";
@@ -22,10 +23,9 @@ export const MODULES = [
   { id: "email", label: "Email", icon: "mail", view: email },
   { id: "shopping", label: "Shopping list", icon: "cart", view: shopping },
   { id: "finances", label: "Finances", icon: "wallet", view: finances },
+  { id: "followups", label: "Follow-ups", icon: "bell", view: followups },
 
-  // Future phases (shown as "Coming soon").
-  { id: "followups", label: "Follow-ups", icon: "bell", comingSoon: true,
-    blurb: "Reminders that nudge you about things you promised to do or are waiting on." },
+  // Future phases would go here with `comingSoon: true` (shown as "Coming soon").
 ];
 
 // Pages that aren't in the main list but still have a web address.

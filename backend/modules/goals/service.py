@@ -240,7 +240,8 @@ def delete_note(conn, note_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 TASK_SELECT = """
-    SELECT t.*, g.title AS goal_title
+    SELECT t.*, g.title AS goal_title,
+           (SELECT r.at FROM reminders r WHERE r.kind = 'task' AND r.ref_id = t.id AND r.fired_at IS NULL) AS remind_at
     FROM tasks t LEFT JOIN goals g ON g.id = t.goal_id
 """
 TASK_ORDER = """ ORDER BY t.done, t.due_date IS NULL, t.due_date,

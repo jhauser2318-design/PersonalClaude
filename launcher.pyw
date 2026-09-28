@@ -46,6 +46,18 @@ IDLE_LIMIT = int(os.environ.get("LCC_IDLE_LIMIT", 180))  # seconds without a che
 AFTER_UPDATE = os.environ.get("LCC_AFTER_UPDATE") == "1"
 
 
+def requested_page() -> str:
+    """Clicking a notification runs "launcher.pyw lifecc://open/<page>": open that page."""
+    arg = sys.argv[1] if len(sys.argv) > 1 else ""
+    if not arg.lower().startswith("lifecc://open/"):
+        return ""
+    page = arg[len("lifecc://open/"):].strip("/")
+    return "".join(c for c in page if c.isalnum() or c in "-/")
+
+
+PAGE = requested_page()
+
+
 def show_error(text: str) -> None:
     logging.error(text)
     try:
@@ -160,7 +172,7 @@ def main() -> None:
     #    (If the app is already running, it switches to it as soon as the
     #    update check below is done.)
     if browser and not AFTER_UPDATE:
-        open_window(browser, SPLASH.as_uri())
+        open_window(browser, SPLASH.as_uri() + (f"#{PAGE}" if PAGE else ""))
 
     # 2. Check GitHub for a newer version: every time you click the icon,
     #    even if the app is already running.
@@ -170,7 +182,7 @@ def main() -> None:
         if result["launcher_changed"]:
             # The launcher itself changed: restart it so the new code runs.
             logging.info("Launcher updated; restarting it")
-            subprocess.Popen([sys.executable, str(ROOT / "launcher.pyw")], cwd=ROOT,
+            subprocess.Popen([sys.executable, str(ROOT / "launcher.pyw"), *sys.argv[1:]], cwd=ROOT,
                              env={**os.environ, "LCC_AFTER_UPDATE": "1"})
             return
 
@@ -179,7 +191,7 @@ def main() -> None:
         info = server_info()
         if info is not None and info.get("version") == installed_version():
             if browser is None:
-                webbrowser.open(URL)
+                webbrowser.open(f"{URL}/#/{PAGE}" if PAGE else URL)
             return  # the window opened above switches to the running app
         logging.info("An older copy of the app is running (%s); restarting it", info)
         stop_old_server(info)
@@ -214,7 +226,7 @@ def main() -> None:
 
     if browser is None:
         logging.info("No Edge/Chrome found; opening the default browser")
-        webbrowser.open(URL)
+        webbrowser.open(f"{URL}/#/{PAGE}" if PAGE else URL)
         thread.join()  # keeps running until you sign out or restart
         return
 

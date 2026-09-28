@@ -11,6 +11,7 @@ from ..goals import service
 from ..goals.service import ValidationError
 from ..calendar import service as calendar
 from ..calendar.google import CalendarError
+from ..followups import service as followups
 from ..habits import service as habits
 from ..shopping import links as shopping_links
 from ..shopping import service as shopping
@@ -55,6 +56,20 @@ def _when(event: dict) -> str:
             return f"{day} – {_date.fromisoformat(last).strftime('%a %d %b')} (all day)"
         return f"{day} (all day)"
     return f"{day}, {event['start'][11:16]}–{event['end'][11:16]}"
+
+
+def _remind(conn, undo: list[dict], kind: str, ref_id: int, at: str | None) -> str:
+    """Set (or with "off", remove) a reminder, remembering the old one for Undo.
+    Returns a short description for the summary."""
+    before = followups.get_reminder(conn, kind, ref_id)
+    after = followups.set_reminder(conn, kind, ref_id, None if at == "off" else at)
+    undo.append({"kind": "reminder", "rkind": kind, "ref_id": ref_id, "before": before})
+    if after is None:
+        return "reminder removed"
+    if after["repeat"] == "daily":
+        return f"🔔 daily at {after['at']}"
+    from datetime import datetime as _dt
+    return f"🔔 {_dt.fromisoformat(after['at']).strftime('%a %d %b, %H:%M')}"
 
 
 def _undo_event(change: dict) -> None:
@@ -136,7 +151,8 @@ def _apply(conn, actions: list[dict], undo: list[dict]) -> tuple[list[dict], lis
             task = service.create_task(conn, fields)
             undo.append({"kind": "task", "id": task["id"], "before": None})
             due = f", due {task['due_date']}" if task["due_date"] else ""
-            summary.append(f"Added {task['area']} task “{task['title']}” ({task['priority']} priority{due})")
+            rem = f" · {_remind(conn, undo, 'task', task['id'], action['remind_at'])}" if action.get("remind_at") else ""
+            summary.append(f"Added {task['area']} task “{task['title']}” ({task['priority']} priority{due}){rem}")
 
         elif kind in ("update_task", "complete_task"):
             task_id = _require(action, "task_id", "task")
@@ -159,7 +175,8 @@ def _apply(conn, actions: list[dict], undo: list[dict]) -> tuple[list[dict], lis
                 fields["goal_id"] = last_new_goal_id
             habit = habits.create_habit(conn, fields)
             undo.append({"kind": "habit", "id": habit["id"], "before": None})
-            summary.append(f"Added routine “{habit['title']}” ({habit['schedule_text']})")
+            rem = f" · {_remind(conn, undo, 'routine', habit['id'], action['remind_at'])}" if action.get("remind_at") else ""
+            summary.append(f"Added routine “{habit['title']}” ({habit['schedule_text']}){rem}")
 
         elif kind == "update_habit":
             habit_id = _require(action, "habit_id", "routine")
@@ -266,6 +283,54 @@ def _apply(conn, actions: list[dict], undo: list[dict]) -> tuple[list[dict], lis
             undo.append({"kind": "shopping_deleted", "id": item_id, "before": before})
             summary.append(f"🛒 Removed “{before['name']}” from your shopping list")
 
+        elif kind == "create_followup":
+            fields = {"title": action.get("title"), "person": action.get("person"),
+                      "direction": action.get("followup_kind") or "todo", "due_date": action.get("due_date"),
+                      "notes": action.get("note")}
+            item = followups.create_followup(conn, {k: v for k, v in fields.items() if v is not None})
+            undo.append({"kind": "followup", "id": item["id"], "before": None})
+            who = f" with {item['person']}" if item["person"] else ""
+            due = f", due {item['due_date']}" if item["due_date"] else ""
+            rem = f" · {_remind(conn, undo, 'followup', item['id'], action['remind_at'])}" if action.get("remind_at") else ""
+            label = "Waiting on" if item["direction"] == "waiting" else "Follow-up"
+            summary.append(f"↩ {label}: “{item['title']}”{who}{due}{rem}")
+
+        elif kind == "update_followup":
+            fid = _require(action, "followup_id", "follow-up")
+            before = row_to_dict(conn.execute("SELECT * FROM followups WHERE id = ?", (fid,)).fetchone())
+            if before is None:
+                raise ValidationError(f"Follow-up #{fid} doesn't exist")
+            fields = {"title": action.get("title"), "person": action.get("person"),
+                      "direction": action.get("followup_kind"), "due_date": action.get("due_date"),
+                      "notes": action.get("note"), "done": action.get("done")}
+            fields = {k: v for k, v in fields.items() if v is not None}
+            rem = ""
+            if fields:
+                after = followups.update_followup(conn, fid, fields)
+                undo.append({"kind": "followup", "id": fid, "before": before})
+            else:
+                after = followups.get_followup(conn, fid)
+            if action.get("remind_at"):
+                rem = f" · {_remind(conn, undo, 'followup', fid, action['remind_at'])}"
+            if not fields and not rem:
+                continue
+            if "done" in fields and len(fields) == 1:
+                summary.append(f"↩ {'Closed' if after['done'] else 'Reopened'} “{after['title']}”{rem}")
+            else:
+                summary.append(f"↩ Updated “{after['title']}”{rem}")
+
+        elif kind == "set_reminder":
+            targets = [(k, action.get(f)) for k, f in (("task", "task_id"), ("routine", "habit_id"),
+                                                        ("followup", "followup_id")) if action.get(f)]
+            if len(targets) != 1 or not action.get("remind_at"):
+                raise ValidationError("Claude didn't say which item the reminder is for, or when")
+            rkind, ref_id = targets[0]
+            table = {"task": "tasks", "routine": "habits", "followup": "followups"}[rkind]
+            row = conn.execute(f"SELECT title FROM {table} WHERE id = ?", (int(ref_id),)).fetchone()
+            if row is None:
+                raise ValidationError(f"That {rkind} doesn't exist")
+            summary.append(f"“{row['title']}”: {_remind(conn, undo, rkind, int(ref_id), action['remind_at'])}")
+
         else:
             raise ValidationError(f"Unknown action '{kind}'")
 
@@ -288,7 +353,8 @@ def undo_command(conn, log_id: int) -> str:
         raise ValidationError("That command was already undone")
 
     tables = {"goal": "goals", "task": "tasks", "note": "goal_notes",
-              "habit": "habits", "habit_log": "habit_logs", "shopping": "shopping_items"}
+              "habit": "habits", "habit_log": "habit_logs", "shopping": "shopping_items",
+              "followup": "followups"}
     # Undo in reverse order: the last change is reverted first.
     for change in reversed(json.loads(row["changes"])):
         if change["kind"] == "event":
@@ -299,6 +365,9 @@ def undo_command(conn, log_id: int) -> str:
             continue
         if change["kind"] == "shopping_deleted":
             shopping.restore_item(conn, change["before"])
+            continue
+        if change["kind"] == "reminder":
+            followups.restore_reminder(conn, change["rkind"], change["ref_id"], change["before"])
             continue
         table = tables[change["kind"]]
         before = change["before"]

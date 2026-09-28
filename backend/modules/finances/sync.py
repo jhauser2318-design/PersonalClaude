@@ -65,7 +65,28 @@ def _sync() -> dict:
         result["categorized"] = assistant.categorize()
     except AssistantError as e:
         result["categorize_error"] = str(e)
+    with get_db() as conn:
+        result["alerts"] = budget_alerts(conn)
     return result
+
+
+def budget_alerts(conn) -> int:
+    """Queue a notification the first time a category goes over its budget this month."""
+    from ..followups import service as followups
+    settings = followups.get_settings(conn)
+    if settings["notify_enabled"] != "1" or settings["notify_budget"] != "1":
+        return 0
+    month = service.month_summary(conn)
+    sent = 0
+    for row in month["categories"]:
+        if row.get("status") != "over":
+            continue
+        over = row["spent"] - row["budget"]
+        sent += followups.add_notification(
+            conn, "budget", f"💸 Over budget: {row['category']}",
+            f"${row['spent']:,.0f} spent of ${row['budget']:,.0f} this month (${over:,.0f} over)",
+            "finances", dedupe=f"budget:{month['month']}:{row['category']}")
+    return sent
 
 
 def sync_in_background(only_if_stale: bool = True) -> bool:

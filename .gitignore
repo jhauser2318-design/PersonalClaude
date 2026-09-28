@@ -44,3 +44,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# SimpleFIN access link (read-only bank access) and the reminder check's log
+data/simplefin.json
+data/notifier.log

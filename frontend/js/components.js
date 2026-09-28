@@ -19,6 +19,7 @@ export function taskRow(t, { showGoal = true, showArea = true } = {}) {
     t.due_date ? `<span class="due ${due}">${due === "overdue" ? "Overdue · " : ""}${esc(fmtDate(t.due_date))}</span>` : "",
     t.priority !== "low" && !t.done ? `<span class="pill ${t.priority}">${PRIORITY_LABELS[t.priority]}</span>` : "",
     showGoal && t.goal_title ? `<span>↳ ${esc(t.goal_title)}</span>` : "",
+    t.remind_at && !t.done ? `<span title="Reminder">🔔 ${esc(fmtDateTime(t.remind_at))}</span>` : "",
   ].filter(Boolean).join("");
   return `
     <li class="task ${t.done ? "done" : ""} ${due === "overdue" ? "is-overdue" : ""}" data-task-id="${t.id}" style="${areaStyle(t.area)}">
@@ -96,6 +97,8 @@ export async function openTaskEditor(task = {}, onChange = () => state.refresh()
           <label class="field"><span>Part of goal (optional)</span>
             <select name="goal_id"><option value="">— None —</option>${goalOpts}</select></label>
         </div>
+        <label class="field"><span>Remind me (optional) · a notification on this computer</span>
+          <input type="datetime-local" name="remind_at" value="${esc(task.remind_at || "")}"></label>
         ${isNew ? "" : `<label class="field" style="flex-direction:row;align-items:center;gap:8px">
           <input type="checkbox" name="done" ${task.done ? "checked" : ""}> <span>Done</span></label>`}
       </form>`,
@@ -124,6 +127,8 @@ export async function openTaskEditor(task = {}, onChange = () => state.refresh()
       due_date: form.due_date.value || null,
       goal_id: form.goal_id.value ? Number(form.goal_id.value) : null,
     };
+    const remind = form.remind_at.value || null;
+    if (isNew ? remind : remind !== (task.remind_at || null)) body.remind_at = remind;
     if (!isNew) body.done = form.done.checked;
     try {
       if (isNew) await api.post("/tasks", body);

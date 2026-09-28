@@ -19,7 +19,8 @@ AREA_ENUM = [a["id"] for a in AREAS]
 ACTION_TYPES = ["create_goal", "update_goal", "add_note", "create_task", "update_task", "complete_task",
                 "create_habit", "update_habit", "log_habit",
                 "create_event", "update_event", "delete_event",
-                "add_shopping_item", "update_shopping_item", "remove_shopping_item"]
+                "add_shopping_item", "update_shopping_item", "remove_shopping_item",
+                "create_followup", "update_followup", "set_reminder"]
 
 
 # Every action field is always present, with a "blank" value when it doesn't
@@ -34,6 +35,7 @@ BLANKS = {
     "amount": 0, "date": "", "active": "",
     "event_id": "", "start": "", "end": "", "location": "",
     "item_id": 0, "category": "", "price": -1, "url": "",
+    "followup_id": 0, "person": "", "followup_kind": "", "remind_at": "",
 }
 YES_NO = {"yes": True, "no": False}
 
@@ -71,6 +73,10 @@ ACTION_SCHEMA = {
         "category": {"type": "string", "enum": ["need", "want", ""]},
         "price": {"type": "number"},
         "url": {"type": "string"},
+        "followup_id": {"type": "integer"},
+        "person": {"type": "string"},
+        "followup_kind": {"type": "string", "enum": ["todo", "waiting", ""]},
+        "remind_at": {"type": "string"},
     },
     "additionalProperties": False,
 }
@@ -102,7 +108,7 @@ RESPONSE_SCHEMA = {
     "additionalProperties": False,
 }
 
-SYSTEM_PROMPT = """You are the command bar of "Life Control Center", a personal dashboard where the user tracks goals, tasks and routines across four life areas (work, health, social, education), next to their Google Calendar.
+SYSTEM_PROMPT = """You are the command bar of "Life Control Center", a personal dashboard where the user tracks goals, tasks, routines and follow-ups across four life areas (work, health, social, education), next to their Google Calendar.
 
 The user types short natural sentences. Work out what they mean and respond with JSON in one of these forms:
 
@@ -132,6 +138,12 @@ Shopping actions:
 - update_shopping_item: item_id (required, from SHOPPING) plus only what changes: title, description, category, price, url, or done "yes" when they bought it ("I bought the running shoes") / "no" to put it back on the list.
 - remove_shopping_item: item_id (required). Only when the user clearly asks to remove/delete an item (not when they bought it; that's update_shopping_item with done "yes").
 
+Follow-ups and reminders:
+- create_followup: something the user must follow up on or is waiting on from someone ("follow up with Sarah about the contract next week", "waiting on Mike for the invoice", "remind me to check if Alex replied Friday"). title (required, short, e.g. "Contract with Sarah"); person (who it's with, or ""); followup_kind "todo" (the user needs to do/chase something) or "waiting" (waiting for someone else); due_date (YYYY-MM-DD, optional); remind_at (optional, see below); note (optional detail).
+- update_followup: followup_id (required, from FOLLOW-UPS) plus only what changes (title, person, followup_kind, due_date, note, remind_at) or done "yes" when it's resolved ("Sarah got back to me") / "no" to reopen.
+- set_reminder: add or change a reminder on an existing item: exactly one of task_id, habit_id or followup_id, plus remind_at. remind_at "off" removes the reminder.
+- remind_at formats: for tasks and follow-ups "YYYY-MM-DDTHH:MM" (24-hour clock, local time); for routines a daily time "HH:MM". create_task, create_habit and create_followup also take remind_at directly. If the user gives a day but no time, use 09:00. "Remind me to X at 6pm" (a one-off) = create_task with due_date that day and remind_at that day 18:00. "Remind me every day at 7 to do my skincare" = set_reminder on that routine with remind_at "07:00" (or create_habit with remind_at if it doesn't exist). Reminders show as notifications on the user's computer.
+
 Rules:
 - Events vs tasks vs routines: a thing with a time slot or that happens on a date is a calendar event; a to-do with a deadline is a task; a repeated habit is a routine. "Schedule", "book", "block time", "put on my calendar", "meeting/appointment at <time>" mean an event. If the calendar isn't connected, don't create events: reply (intent "answer") that Google Calendar needs to be connected on the Calendar page first, and offer to add it as a task instead.
 - For "when am I free" questions, read the CALENDAR list and answer with concrete free slots (intent "answer").
@@ -151,7 +163,8 @@ class AssistantError(Exception):
 
 
 def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | None = None,
-                  calendar: dict | None = None, shopping: list[dict] | None = None) -> str:
+                  calendar: dict | None = None, shopping: list[dict] | None = None,
+                  followups: list[dict] | None = None) -> str:
     today = date.today()
     lines = [f"Today is {today.strftime('%A')}, {today.isoformat()}.", "", "GOALS (id | area | title | status | progress | target date | last update):"]
     if not goals:
@@ -162,15 +175,16 @@ def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | Non
             f"#{g['id']} | {g['area']} | {g['title']} | {g['status']} | {g['progress']}% | "
             f"{g['target_date'] or 'no date'} | {(g.get('last_note_at') or 'never')[:10]}{desc}"
         )
-    lines += ["", "TASKS (id | area | title | goal id | due | priority | done):"]
+    lines += ["", "TASKS (id | area | title | goal id | due | priority | done | reminder):"]
     if not tasks:
         lines.append("(none yet)")
     for t in tasks:
         lines.append(
             f"#{t['id']} | {t['area']} | {t['title']} | {t['goal_id'] or '-'} | "
-            f"{t['due_date'] or 'no date'} | {t['priority']} | {'done' if t['done'] else 'open'}"
+            f"{t['due_date'] or 'no date'} | {t['priority']} | {'done' if t['done'] else 'open'} | "
+            f"{t.get('remind_at') or '-'}"
         )
-    lines += ["", "ROUTINES (id | area | title | schedule | today | streak | active):"]
+    lines += ["", "ROUTINES (id | area | title | schedule | today | streak | active | daily reminder):"]
     if not habits:
         lines.append("(none yet)")
     for h in habits or []:
@@ -184,7 +198,7 @@ def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | Non
             today_s += f", {h['week_done']}/{h['times_per_week']} this week"
         lines.append(
             f"#{h['id']} | {h['area']} | {h['title']} | {h['schedule_text']} | {today_s} | "
-            f"{h['streak']} | {'active' if h['active'] else 'paused'}"
+            f"{h['streak']} | {'active' if h['active'] else 'paused'} | {h.get('remind_at') or '-'}"
         )
     lines += [""]
     calendar = calendar or {}
@@ -207,6 +221,12 @@ def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | Non
         price = f"${it['price']:,.2f}" if it["price"] is not None else "no price"
         lines.append(f"#{it['id']} | {it['category']} | {it['name']} | {price} | {it['description'] or '-'} | "
                      f"{it['url'] or '-'} | {'bought' if it['bought'] else 'to buy'}")
+    lines += ["", "FOLLOW-UPS (id | todo/waiting | title | person | due | reminder | status):"]
+    if not followups:
+        lines.append("(none)")
+    for f in followups or []:
+        lines.append(f"#{f['id']} | {f['direction']} | {f['title']} | {f['person'] or '-'} | {f['due_date'] or 'no date'} | "
+                     f"{f['remind_at'] or '-'} | {'done' if f['done'] else 'open'}")
     return "\n".join(lines)
 
 

@@ -12,10 +12,10 @@ A personal dashboard that runs on your own computer and opens in your web browse
 - **Email**: ask the AI about your **Gmail** ("What did Sarah say about the budget?", "Any bills due?") and have it draft emails and replies. You always review a draft and click **Send** yourself.
 - **Shopping list**: things you **need** and **want**, each with what it is, its price and a link to the store. Totals for each, a "Bought" list, and paste-a-link to fill in the name and price.
 - **Finances**: your bank accounts and credit cards (through **SimpleFIN Bridge**, read-only). Cash flow per month, spending by category, monthly budgets with pace tracking, recurring charges and subscriptions, a searchable transaction list, and AI reports and answers ("How much did I spend on dining last month?"). Transactions are sorted into categories by AI; your corrections stick.
+- **Follow-ups & notifications**: a list of things you need to follow up on or are waiting on from others, and **reminders** on tasks, routines and follow-ups that pop up as **Windows notifications**, even when the app is closed. Optional morning briefing and budget alerts.
 - **Dashboard**: a "command center" with a progress ring for each area, today's schedule, today's routines, what's due today and this week, overdue items, and an activity feed.
 - **Live command bar**: type normal sentences and Claude (Anthropic's AI) makes the changes for you. Every change can be undone.
 
-The sidebar already has a spot for **Follow-ups**. It says "Coming soon" and will be built in a later phase.
 
 ---
 
@@ -142,6 +142,11 @@ The bar at the top is always visible. Press **/** anywhere to jump to it. Type a
 | `Am I on track with my budget this month?` | Compares spending so far with your budgets and the day of the month |
 | `What subscriptions am I paying for?` | Lists recurring charges with amounts |
 | `Set my dining budget to $300` | Sets that monthly budget |
+| `Remind me to call Mom at 6pm` | Adds a task due today with a 6 PM reminder |
+| `Remind me every day at 7am to do my skincare` | Adds a daily reminder to that routine (only pops up if it isn't done yet) |
+| `Follow up with Sarah about the contract Friday at 10am` | Adds a follow-up with a reminder |
+| `Waiting on Mike for the invoice` | Adds it under "Waiting on…" |
+| `Sarah sent the contract` | Closes that follow-up |
 
 After each command you'll see a short confirmation of exactly what changed, with an **Undo** button.
 If Claude isn't sure what you mean (for example, two goals could match), it **asks you a question instead of guessing**. Type your answer in the bar and it will remember what you were talking about.
@@ -211,6 +216,20 @@ Using it:
 - The app syncs when it starts and when you open Finances (if the last sync is a few hours old), and with **Sync now**. SimpleFIN itself refreshes from your banks about once a day. If a bank needs you to sign in again, a notice appears; fix it on the SimpleFIN website.
 - To edit an account (nickname, type, or hide it from totals), click the pencil next to it in **Balances**. **Connection…** disconnects.
 
+### Notifications and follow-ups
+
+1. Open **Follow-ups** and click **Turn on notifications**. A test notification appears in the bottom-right corner of your screen.
+2. Add reminders:
+   - **Tasks**: "Remind me" date and time in the task editor.
+   - **Routines**: "Daily reminder" time in the routine editor. It only pops up if you haven't checked the routine off yet that day.
+   - **Follow-ups**: "Remind me" in the follow-up editor.
+   - Or just tell the AI bar ("Remind me to…", "Follow up with… on Friday").
+3. Optional: pick a **Morning briefing** time (tasks due, routines to do, follow-ups due, and yesterday's spending) and keep **Budget alerts** on.
+
+How it works: turning notifications on adds a small Windows scheduled task, "Life Control Center reminders", that checks once a minute whether anything is due. It runs while you're signed in to Windows, **even when the app window is closed**, and uses almost no power. Click a notification to open the app on the right page. If the computer was off at reminder time, the reminder shows up as soon as you sign in again (up to a day late). Each morning the check also syncs your bank accounts, so budget alerts don't wait for you to open the app. **Turn off** removes the scheduled task.
+
+The **Follow-ups** page lists "I need to…" and "Waiting on…" items, every upcoming reminder, and recent notifications.
+
 ### Example data
 
 The first time you start the app, it adds one example goal per life area plus a few tasks, so you can try things out. When you're ready for your own data, go to **Settings → Clear example data**. This removes only the examples, never anything you created. **Load examples again** brings them back.
@@ -248,6 +267,7 @@ The first time you start the app, it adds one example goal per life area plus a 
 | Finances says the Setup Token *"was already used or is invalid"* | Each token works once. Create a new one on the SimpleFIN Bridge website and paste it. |
 | Finances says SimpleFIN *"no longer accepts this app's access"* | Access was removed on the SimpleFIN side. Click **Connection… → Disconnect**, then connect again with a new token. |
 | A transaction is in the wrong category | Click it on the **Transactions** tab and pick the right one (tick "all similar" so it sticks). |
+| No notifications appear | On Follow-ups, click **Send a test**. If nothing shows, check Windows **Settings → System → Notifications**: notifications must be on, **Do not disturb** / Focus off, and "Life Control Center" (or "Windows PowerShell") allowed. Problems are logged in `data\notifier.log`. |
 | Double-clicking the icon does nothing, or an error box appears | Look in `C:\Users\<you>\LifeControlCenter\data\app.log` for details, or double-click `start.bat` in that folder to see the app's messages as it starts. |
 
 ---
@@ -259,6 +279,7 @@ LifeControlCenter/
 ├── INSTALL.bat              ← one-time Windows setup (runs scripts/install.ps1)
 ├── launcher.pyw             ← what the Desktop icon runs: updates, then starts the app in its own window
 ├── updater.py               ← downloads the newest version from GitHub (keeps data/ and .env)
+├── notifier.pyw             ← the once-a-minute reminder check (run by Windows Task Scheduler)
 ├── start.bat / start.sh     ← starts the app with a visible log window (handy for troubleshooting)
 ├── requirements.txt         ← Python packages the app needs
 ├── .env.example             ← template for your settings (copy to .env)
@@ -268,6 +289,7 @@ LifeControlCenter/
 │   ├── config.py            ← reads .env
 │   ├── database.py          ← SQLite helpers; each module registers its own tables
 │   ├── areas.py             ← the 4 life areas and their colors
+│   ├── notify.py            ← finds due reminders and shows Windows notifications
 │   └── modules/
 │       ├── __init__.py      ← the list of backend modules
 │       ├── goals/           ← Phase 1: goals, tasks, notes, dashboard, examples
@@ -276,6 +298,7 @@ LifeControlCenter/
 │       ├── email/           ← Gmail: search, read, send; the email AI assistant
 │       ├── shopping/        ← shopping list (needs/wants) and reading product links
 │       ├── finances/        ← SimpleFIN sync, categories, budgets, cash flow; the finance AI assistant
+│       ├── followups/       ← follow-ups, reminders, notification history and settings
 │       └── assistant/       ← command bar: Claude prompt, JSON schema, apply + undo
 └── frontend/                ← what you see in the browser (plain HTML/CSS/JS, no build step)
     ├── index.html, styles.css
@@ -286,9 +309,9 @@ LifeControlCenter/
         └── views/           ← one file per page
 ```
 
-**Adding a new module later (e.g. Follow-ups):**
-1. Backend: create `backend/modules/followups/` with a `router` (its API endpoints) and optional `on_startup`, then add it to the `MODULES` list in `backend/modules/__init__.py`. (`backend/modules/shopping/` is a good example.)
-2. Frontend: add `frontend/js/views/followups.js` with a `render(view)` function, then in `frontend/js/modules.js` import it and replace `comingSoon: true` with `view: followups`.
+**Adding a new module later (e.g. "Travel"):**
+1. Backend: create `backend/modules/travel/` with a `router` (its API endpoints) and optional `on_startup`, then add it to the `MODULES` list in `backend/modules/__init__.py`. (`backend/modules/shopping/` is a good example.)
+2. Frontend: add `frontend/js/views/travel.js` with a `render(view)` function, then add it to the list in `frontend/js/modules.js`.
 3. To let the command bar control it: add new action types to the schema and prompt in `backend/modules/assistant/claude_client.py`, and handle them in `actions.py`.
 
 **How the command bar works under the hood:** the backend sends Claude your sentence, today's date and a compact list of your goals and tasks with their ID numbers. The request uses *structured outputs*, which forces Claude's reply to be JSON matching a fixed schema (`intent`, `reply`, `actions`). The backend checks every action and applies them all together in one step: if any action is invalid, nothing changes. Before changing anything it saves the old version of each item, which is what **Undo** puts back.

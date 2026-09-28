@@ -274,6 +274,8 @@ def get_habit(conn, habit_id: int) -> dict | None:
         habit.update(stats(conn, habit))
         goal = get_goal_row(conn, habit["goal_id"]) if habit["goal_id"] else None
         habit["goal_title"] = goal["title"] if goal else None
+        rem = conn.execute("SELECT at FROM reminders WHERE kind = 'routine' AND ref_id = ?", (habit_id,)).fetchone()
+        habit["remind_at"] = rem["at"] if rem else None  # daily reminder time, "HH:MM"
     return habit
 
 

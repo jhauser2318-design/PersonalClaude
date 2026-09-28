@@ -12,7 +12,7 @@ from datetime import date
 
 import anthropic
 
-from ... import config
+from ... import ai_models, config
 from ...areas import AREAS
 
 AREA_ENUM = [a["id"] for a in AREAS]
@@ -249,21 +249,13 @@ def ask_claude(text: str, context: str, history: list[dict]) -> dict:
         messages = messages[:-1]
     messages.append({"role": "user", "content": f"<data>\n{context}\n</data>\n\nUser: {text}"})
 
+    # The model is chosen in Settings → AI models (see backend/ai_models.py).
     request = dict(
-        model=config.CLAUDE_MODEL,
         max_tokens=8000,
         system=SYSTEM_PROMPT,
         messages=messages,
-        output_config={
-            "effort": "medium",
-            "format": {"type": "json_schema", "schema": RESPONSE_SCHEMA},
-        },
+        **ai_models.request_options("command", "medium", {"type": "json_schema", "schema": RESPONSE_SCHEMA}),
     )
-    # On Claude Opus 5, if a safety check declines a request, "fallbacks"
-    # lets Anthropic automatically retry it on another model.
-    if config.CLAUDE_MODEL == "claude-opus-5":
-        request["betas"] = ["server-side-fallback-2026-07-01"]
-        request["fallbacks"] = "default"
 
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     try:
@@ -273,7 +265,7 @@ def ask_claude(text: str, context: str, history: list[dict]) -> dict:
     except anthropic.PermissionDeniedError:
         raise AssistantError("Your API key doesn't have permission to use this model.")
     except anthropic.NotFoundError:
-        raise AssistantError(f"Model '{config.CLAUDE_MODEL}' wasn't found. Check CLAUDE_MODEL in .env.")
+        raise AssistantError(f"Model '{request['model']}' isn't available to your API key. Pick another in Settings → AI models.")
     except anthropic.RateLimitError:
         raise AssistantError("Too many requests right now (or your credit ran out). Try again in a minute.")
     except anthropic.BadRequestError as e:

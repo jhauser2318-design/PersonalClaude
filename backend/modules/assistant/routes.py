@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
-from ... import config
+from ... import ai_models, config
 from ...database import get_db
 from datetime import date, timedelta
 
@@ -31,9 +31,29 @@ class CommandIn(BaseModel):
     history: list[Turn] = []
 
 
+class ModelIn(BaseModel):
+    role: str
+    model: str
+
+
 @router.get("/status")
 def status():
-    return {"api_key_configured": config.api_key_configured(), "model": config.CLAUDE_MODEL}
+    return {"api_key_configured": config.api_key_configured(), "model": ai_models.model_for("command")}
+
+
+@router.get("/models")
+def models():
+    """Settings → AI models: the available models and which one each feature uses."""
+    return ai_models.choices()
+
+
+@router.put("/models")
+def set_model(body: ModelIn):
+    try:
+        ai_models.set_model(body.role, body.model)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ai_models.choices()
 
 
 @router.post("")

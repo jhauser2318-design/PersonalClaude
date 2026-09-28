@@ -724,6 +724,14 @@ a.btn { text-decoration: none; color: inherit; }
   .fu-lower, .fu-settings { grid-template-columns: 1fr; }
 }
 
+/* ---------- AI models (Settings) ---------- */
+.ai-roles { display: grid; gap: 2px; margin: 4px 0 10px; }
+.ai-role { display: grid; grid-template-columns: 1fr 290px; gap: 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }
+.ai-role-text { display: grid; gap: 2px; font-size: 13.5px; }
+.ai-role-text span { color: var(--text-3); font-size: 12.5px; }
+.ai-notes { margin: 6px 0 0; padding-left: 18px; color: var(--text-2); font-size: 12.5px; display: grid; gap: 3px; }
+@media (max-width: 700px) { .ai-role { grid-template-columns: 1fr; gap: 6px; } }
+
 /* ---------- Phone access ---------- */
 .login-screen { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; background: var(--bg, #070a12); }
 .login-card { width: min(380px, 100%); padding: 28px 24px; display: grid; gap: 12px; text-align: center; }

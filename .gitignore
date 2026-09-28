@@ -31,6 +31,10 @@ data/*.db-shm
 *.sqlite
 *.sqlite3
 
+# The desktop app window's browser settings, and the launcher's log
+data/browser-profile/
+data/app.log
+
 # Python clutter
 __pycache__/
 *.pyc

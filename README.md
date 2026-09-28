@@ -52,15 +52,23 @@ After this, you can delete the ZIP and the extracted folder. The app lives in `C
 
 ### Every day after that
 
-**Double-click the Life Control Center icon on your Desktop.** Your browser opens the app at **http://localhost:8000**.
+**Double-click the Life Control Center icon on your Desktop** (or find it in the Start menu). The app opens in **its own window**, like any other program: no browser tabs, no address bar.
 
-- A small window labelled *Life Control Center* waits in the taskbar while the app runs. **Closing that window stops the app.**
-- Clicking the icon again while the app is running just opens the browser tab.
-- You can bookmark http://localhost:8000. It works whenever the app is running. (`localhost` means "this computer": the app isn't on the internet, and nobody else can see it.)
+- **Closing the window closes the app.** Nothing keeps running in the background.
+- **Pin it** so it's one click away: right-click the Desktop icon, choose **Show more options → Pin to taskbar** (or **Pin to Start**).
+- Behind the scenes, the window shows the page at http://localhost:8000. (`localhost` means "this computer": the app isn't on the internet, and nobody else can see it.)
+- The window uses Microsoft Edge, which comes with Windows (or Google Chrome if Edge is missing). It keeps its own settings, separate from your normal browser.
 
 ### Updating to a newer version later
 
-Download the ZIP again, extract it, and double-click `INSTALL.bat`. Your goals, tasks and API key are kept.
+The app on your computer is a **copy**. The main version lives on GitHub. When the code on GitHub changes (for example, when Claude builds the next phase for you), your copy **does not change by itself**. To update it:
+
+1. Close the app window.
+2. Download the ZIP again (same link as above), extract it, and double-click `INSTALL.bat`.
+
+That's it. **Your goals, tasks, notes and API key are kept**: the installer never touches your `data` folder or your `.env` file. The Desktop icon and the address stay the same.
+
+> If you change the app's code files directly in `C:\Users\<you>\LifeControlCenter`, the change shows up the next time you open the app, but the next update will overwrite it. To keep changes, make them on GitHub (or ask Claude to).
 
 <details>
 <summary>Setting it up by hand instead (Windows PowerShell)</summary>
@@ -140,6 +148,7 @@ The first time you start the app, it adds one example goal per life area plus a 
 | *"Too many requests… or your credit ran out"* | Wait a minute, or add credit under **Billing** in the Anthropic Console. |
 | `address already in use` / port 8000 busy | Another program is using port 8000. Change `8000` to `8001` (in two places) in `start.bat`, then open http://localhost:8001. |
 | The page says it can't reach the backend, or http://localhost:8000 won't load | The app isn't running. Double-click the Desktop icon. |
+| Double-clicking the icon does nothing, or an error box appears | Look in `C:\Users\<you>\LifeControlCenter\data\app.log` for details, or double-click `start.bat` in that folder to see the app's messages as it starts. |
 
 ---
 
@@ -148,7 +157,8 @@ The first time you start the app, it adds one example goal per life area plus a 
 ```
 LifeControlCenter/
 ├── INSTALL.bat              ← one-time Windows setup (runs scripts/install.ps1)
-├── start.bat / start.sh     ← starts the app (the Desktop icon runs start.bat)
+├── launcher.pyw             ← what the Desktop icon runs: starts the app in its own window
+├── start.bat / start.sh     ← starts the app with a visible log window (handy for troubleshooting)
 ├── requirements.txt         ← Python packages the app needs
 ├── .env.example             ← template for your settings (copy to .env)
 ├── data/                    ← your database lives here (not uploaded to GitHub)

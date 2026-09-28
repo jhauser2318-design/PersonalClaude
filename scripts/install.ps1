@@ -7,7 +7,7 @@
 #   3. installs the Python packages the app needs
 #   4. asks for your Anthropic API key and saves it in .env
 #   5. puts a "Life Control Center" icon on your Desktop and in the Start menu
-#   6. starts the app and opens it in your browser
+#   6. starts the app and opens it in its own window
 #
 # Safe to run again (for example after downloading a newer version):
 # your data (data\life.db) and your .env file are never overwritten.
@@ -153,10 +153,12 @@ $places = @([Environment]::GetFolderPath("Desktop"), [Environment]::GetFolderPat
 foreach ($dir in $places) {
     if (-not $dir) { continue }
     $lnk = $shell.CreateShortcut((Join-Path $dir "$AppName.lnk"))
-    $lnk.TargetPath = Join-Path $Target "start.bat"
+    # pythonw.exe runs the launcher without a black console window. The launcher
+    # starts the app and opens it in its own window (see launcher.pyw).
+    $lnk.TargetPath = Join-Path $Target ".venv\Scripts\pythonw.exe"
+    $lnk.Arguments = '"' + (Join-Path $Target "launcher.pyw") + '"'
     $lnk.WorkingDirectory = $Target
     $lnk.IconLocation = (Join-Path $Target "frontend\icon.ico") + ",0"
-    $lnk.WindowStyle = 7   # start minimized: the app window waits in the taskbar
     $lnk.Description = "Open $AppName"
     $lnk.Save()
 }
@@ -168,12 +170,13 @@ Say "   All set!" "Green"
 Say "==============================================" "Green"
 Write-Host ""
 Write-Host "   From now on, just double-click  '$AppName'  on your Desktop."
-Write-Host "   (It's also in the Start menu.) Your browser opens the app at"
-Write-Host "   http://localhost:8000"
+Write-Host "   (It's also in the Start menu.) The app opens in its own window;"
+Write-Host "   closing that window closes the app."
 Write-Host ""
 Write-Host "   Your app and data live in: $Target"
 Write-Host "   You can delete the downloaded ZIP and folder now."
 Write-Host ""
 Write-Host "   Starting the app for you now..."
-Start-Process -FilePath (Join-Path $Target "start.bat") -WorkingDirectory $Target -WindowStyle Minimized
+Start-Process -FilePath (Join-Path $Target ".venv\Scripts\pythonw.exe") `
+    -ArgumentList ('"' + (Join-Path $Target "launcher.pyw") + '"') -WorkingDirectory $Target
 Start-Sleep -Seconds 3

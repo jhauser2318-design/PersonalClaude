@@ -12,6 +12,8 @@ from ..goals.service import ValidationError
 from ..calendar import service as calendar
 from ..calendar.google import CalendarError
 from ..habits import service as habits
+from ..shopping import links as shopping_links
+from ..shopping import service as shopping
 
 register_schema(
     """
@@ -217,6 +219,53 @@ def _apply(conn, actions: list[dict], undo: list[dict]) -> tuple[list[dict], lis
             gone = calendar.simplify(before)
             summary.append(f"📅 Removed “{gone['title']}” from your calendar ({_when(gone)})")
 
+        elif kind == "add_shopping_item":
+            fields = {"name": action.get("title"), "description": action.get("description"),
+                      "category": action.get("category") or "want", "price": action.get("price"),
+                      "url": action.get("url")}
+            if fields["url"] and (not fields["name"] or fields["price"] is None):
+                # Fill in what's missing from the product page, if the store allows it.
+                found = shopping_links.fetch_details(fields["url"])
+                fields["name"] = fields["name"] or found["name"]
+                fields["description"] = fields["description"] or found["description"]
+                if fields["price"] is None:
+                    fields["price"] = found["price"]
+                if not fields["name"]:
+                    raise ValidationError("I couldn't read the item's name from that link. "
+                                          "Say what it is, e.g. “add the Sony headphones to my wants: <link>”.")
+            item = shopping.create_item(conn, {k: v for k, v in fields.items() if v is not None})
+            undo.append({"kind": "shopping", "id": item["id"], "before": None})
+            price = f", ${item['price']:,.2f}" if item["price"] is not None else ""
+            summary.append(f"🛒 Added “{item['name']}” to your {item['category']}s{price}")
+
+        elif kind == "update_shopping_item":
+            item_id = _require(action, "item_id", "shopping item")
+            before = shopping.get_item(conn, item_id)
+            if before is None:
+                raise ValidationError(f"Shopping item #{item_id} doesn't exist")
+            fields = {"name": action.get("title"), "description": action.get("description"),
+                      "category": action.get("category"), "price": action.get("price"),
+                      "url": action.get("url"), "bought": action.get("done")}
+            fields = {k: v for k, v in fields.items() if v is not None}
+            if not fields:
+                continue
+            after = shopping.update_item(conn, item_id, fields)
+            undo.append({"kind": "shopping", "id": item_id, "before": before})
+            if "bought" in fields and len(fields) == 1:
+                summary.append(f"🛒 Marked “{after['name']}” as {'bought ✓' if after['bought'] else 'still to buy'}")
+            else:
+                changed = ["link" if f == "url" else f for f in fields]
+                summary.append(f"🛒 Updated “{after['name']}” ({', '.join(changed)})")
+
+        elif kind == "remove_shopping_item":
+            item_id = _require(action, "item_id", "shopping item")
+            before = shopping.get_item(conn, item_id)
+            if before is None:
+                raise ValidationError(f"Shopping item #{item_id} doesn't exist")
+            shopping.delete_item(conn, item_id)
+            undo.append({"kind": "shopping_deleted", "id": item_id, "before": before})
+            summary.append(f"🛒 Removed “{before['name']}” from your shopping list")
+
         else:
             raise ValidationError(f"Unknown action '{kind}'")
 
@@ -239,7 +288,7 @@ def undo_command(conn, log_id: int) -> str:
         raise ValidationError("That command was already undone")
 
     tables = {"goal": "goals", "task": "tasks", "note": "goal_notes",
-              "habit": "habits", "habit_log": "habit_logs"}
+              "habit": "habits", "habit_log": "habit_logs", "shopping": "shopping_items"}
     # Undo in reverse order: the last change is reverted first.
     for change in reversed(json.loads(row["changes"])):
         if change["kind"] == "event":
@@ -247,6 +296,9 @@ def undo_command(conn, log_id: int) -> str:
                 _undo_event(change)
             except CalendarError as e:
                 raise ValidationError(f"Couldn't undo the calendar change: {e}")
+            continue
+        if change["kind"] == "shopping_deleted":
+            shopping.restore_item(conn, change["before"])
             continue
         table = tables[change["kind"]]
         before = change["before"]

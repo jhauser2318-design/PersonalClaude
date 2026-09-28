@@ -9,6 +9,7 @@ import * as email from "./views/email.js";
 import * as goals from "./views/goals.js";
 import * as routines from "./views/routines.js";
 import * as settings from "./views/settings.js";
+import * as shopping from "./views/shopping.js";
 import * as tasks from "./views/tasks.js";
 
 export const MODULES = [
@@ -18,14 +19,13 @@ export const MODULES = [
   { id: "routines", label: "Routines", icon: "repeat", view: routines },
   { id: "calendar", label: "Calendar", icon: "calendar", view: calendar },
   { id: "email", label: "Email", icon: "mail", view: email },
+  { id: "shopping", label: "Shopping list", icon: "cart", view: shopping },
 
   // Future phases (shown as "Coming soon").
   { id: "finances", label: "Finances", icon: "wallet", comingSoon: true,
     blurb: "Track spending, budgets and savings goals alongside the rest of your life." },
   { id: "followups", label: "Follow-ups", icon: "bell", comingSoon: true,
     blurb: "Reminders that nudge you about things you promised to do or are waiting on." },
-  { id: "shopping", label: "Shopping list", icon: "cart", comingSoon: true,
-    blurb: "Keep a running shopping list, grouped by store or aisle, and add items just by typing “add milk and eggs to my shopping list”." },
 ];
 
 // Pages that aren't in the main list but still have a web address.

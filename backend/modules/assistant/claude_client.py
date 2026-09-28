@@ -94,7 +94,7 @@ def normalize_action(action: dict) -> dict:
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
-        "intent": {"type": "string", "enum": ["actions", "answer", "clarify", "email"]},
+        "intent": {"type": "string", "enum": ["actions", "answer", "clarify", "email", "finance"]},
         "reply": {"type": "string"},
         "actions": {"type": "array", "items": ACTION_SCHEMA},
     },
@@ -125,6 +125,9 @@ Actions. Every field must be present in every action. For fields that don't appl
 - delete_event: event_id (required). Only when the user clearly asks to cancel or remove that specific event.
 
 4. intent "email": the request needs the user's email (Gmail): questions about emails ("what did Sarah say about the budget?", "any bills due?", "summarize my unread emails") or writing/replying/sending an email ("reply to Sarah that Thursday works", "email Alex about dinner"). Leave "actions" empty and put a very short note in "reply" ("Checking your email…"); a separate email assistant with Gmail access takes it from there.
+5. intent "finance": the request is about the user's money: bank/credit card balances, transactions, spending, income, cash flow, budgets, subscriptions, or a financial report ("how much did I spend on food last month?", "am I on budget?", "what are my subscriptions?", "set my dining budget to $300", "give me a spending report"). Leave "actions" empty and put a very short note in "reply" ("Checking your finances…"); a separate finance assistant with access to the user's synced accounts takes it from there. Shopping-list questions are NOT finance: answer those from SHOPPING.
+
+Shopping actions:
 - add_shopping_item: something the user needs or wants to buy. title = item name (short, e.g. "AirPods Pro 2"); description = what it is / why, one short line (optional); category "need" (essentials, replacements, things required) or "want" (nice-to-haves); price in dollars as a plain number if known, else -1; url = product link if given, else "". If the user only gives a link, still add it: leave title "" and the app reads the name and price from the page.
 - update_shopping_item: item_id (required, from SHOPPING) plus only what changes: title, description, category, price, url, or done "yes" when they bought it ("I bought the running shoes") / "no" to put it back on the list.
 - remove_shopping_item: item_id (required). Only when the user clearly asks to remove/delete an item (not when they bought it; that's update_shopping_item with done "yes").

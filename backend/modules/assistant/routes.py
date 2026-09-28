@@ -76,6 +76,17 @@ async def run_command(body: CommandIn):
             return {"status": "error", "reply": str(e), "changes": [], "log_id": None}
         return {"status": "email", "reply": answer["answer"], "sources": answer["sources"],
                 "draft": answer["draft"], "changes": [], "log_id": None}
+    if intent == "finance":
+        # Hand over to the finance assistant (read-only access to your synced
+        # accounts; it can also set budgets and categories in this app).
+        from ..finances import assistant as finance_assistant
+        from ..finances.simplefin import FinanceError
+        try:
+            answer = await run_in_threadpool(
+                finance_assistant.ask, text, [t.model_dump() for t in body.history])
+        except (AssistantError, FinanceError) as e:
+            return {"status": "error", "reply": str(e), "changes": [], "log_id": None}
+        return {"status": "finance", "reply": answer["answer"], "changes": answer["changes"], "log_id": None}
     if intent != "actions" or not result["actions"]:
         return {"status": "clarify" if intent == "clarify" else "answer",
                 "reply": reply, "changes": [], "log_id": None}

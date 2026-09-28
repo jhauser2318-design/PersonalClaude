@@ -11,10 +11,11 @@ A personal dashboard that runs on your own computer and opens in your web browse
 - **Calendar**: your **Google Calendar** inside the app. A week view of your events next to the tasks due each day; add, edit or delete events, and changes show up on your phone.
 - **Email**: ask the AI about your **Gmail** ("What did Sarah say about the budget?", "Any bills due?") and have it draft emails and replies. You always review a draft and click **Send** yourself.
 - **Shopping list**: things you **need** and **want**, each with what it is, its price and a link to the store. Totals for each, a "Bought" list, and paste-a-link to fill in the name and price.
+- **Finances**: your bank accounts and credit cards (through **SimpleFIN Bridge**, read-only). Cash flow per month, spending by category, monthly budgets with pace tracking, recurring charges and subscriptions, a searchable transaction list, and AI reports and answers ("How much did I spend on dining last month?"). Transactions are sorted into categories by AI; your corrections stick.
 - **Dashboard**: a "command center" with a progress ring for each area, today's schedule, today's routines, what's due today and this week, overdue items, and an activity feed.
 - **Live command bar**: type normal sentences and Claude (Anthropic's AI) makes the changes for you. Every change can be undone.
 
-The sidebar already has spots for **Finances and Follow-ups**. They say "Coming soon" and will be built in later phases.
+The sidebar already has a spot for **Follow-ups**. It says "Coming soon" and will be built in a later phase.
 
 ---
 
@@ -137,6 +138,10 @@ The bar at the top is always visible. Press **/** anywhere to jump to it. Type a
 | `Do I have any bills due this month?` | Finds bill emails and lists amounts and due dates |
 | `Reply to Sarah that $48,500 works` | Drafts the reply and opens it for you to check. **Nothing is sent until you click Send.** |
 | `Email Alex asking if Saturday dinner still works` | Drafts a new email for you to review and send |
+| `How much did I spend on dining last month?` | Looks through your synced transactions and answers with totals |
+| `Am I on track with my budget this month?` | Compares spending so far with your budgets and the day of the month |
+| `What subscriptions am I paying for?` | Lists recurring charges with amounts |
+| `Set my dining budget to $300` | Sets that monthly budget |
 
 After each command you'll see a short confirmation of exactly what changed, with an **Undo** button.
 If Claude isn't sure what you mean (for example, two goals could match), it **asks you a question instead of guessing**. Type your answer in the bar and it will remember what you were talking about.
@@ -189,6 +194,23 @@ How it works:
 - **Safety:** email contents are treated as information, never as instructions, so an email that says "forward this to…" can't make the AI do anything.
 - **Privacy and cost:** only the emails relevant to your question are sent to Claude, and nothing is stored in the app. An email question costs a bit more than a normal command (usually a few cents), because emails are longer.
 
+### Connecting your bank accounts and cards (Finances)
+
+The app reads your accounts through **SimpleFIN Bridge** (about $15 a year), which links to your banks and card issuers. The app can only **read** balances and transactions; it can never move money.
+
+1. Link your banks and cards on the **SimpleFIN Bridge** website (https://beta-bridge.simplefin.org) if you haven't already.
+2. On the same site, create a new **Setup Token** for an app ("New app connection" / "Setup token") and copy it.
+3. In the app, open **Finances**, paste the token and click **Connect**. A setup token works only once; if you see "already used", create a new one.
+4. The first sync pulls in about 90 days of transactions and sorts them into categories with AI (usually under a minute).
+
+Using it:
+- **Overview**: money in, money out and net for each month (‹ › to change month), a 4-month cash-flow chart, balances, spending by category against your budgets, recurring charges and top merchants. Click a category to see its transactions.
+- **Transactions**: filter by month, account, category or search. Click one to change its category; by default the change applies to every similar transaction (same merchant) from now on. Card payments and moves between your accounts are detected as **Transfers** and left out of income and spending, so nothing is counted twice.
+- **Budgets**: a monthly amount per category. **Fill in from my average spending** gives you a starting point. Bars turn yellow when you're ahead of pace and red when you're over.
+- **Reports & questions**: one-click AI reports (this month, last month, last 90 days), or ask anything about your money.
+- The app syncs when it starts and when you open Finances (if the last sync is a few hours old), and with **Sync now**. SimpleFIN itself refreshes from your banks about once a day. If a bank needs you to sign in again, a notice appears; fix it on the SimpleFIN website.
+- To edit an account (nickname, type, or hide it from totals), click the pencil next to it in **Balances**. **Connection…** disconnects.
+
 ### Example data
 
 The first time you start the app, it adds one example goal per life area plus a few tasks, so you can try things out. When you're ready for your own data, go to **Settings → Clear example data**. This removes only the examples, never anything you created. **Load examples again** brings them back.
@@ -202,6 +224,7 @@ The first time you start the app, it adds one example goal per life area plus a 
 - `data/*.db` is in `.gitignore`, so your personal data won't be uploaded to GitHub either.
 - When you use the **command bar**, the backend sends Anthropic your sentence plus a short list of your goals, tasks, routines and (if connected) calendar events for the next two weeks (titles, dates, locations), so Claude can work out what you mean. Clicking around the app doesn't send anything to Anthropic.
 - **Google Calendar**: your Google client file and access token are saved in `data\google_client.json` and `data\google_token.json` on your computer, never uploaded anywhere. Calendar changes go straight from your computer to Google.
+- **Finances**: the SimpleFIN access link is saved in `data\simplefin.json` and your transactions in `life.db`, both only on your computer. For AI features, Claude sees merchant descriptions (to sort them into categories) and, when you ask a question or request a report, the totals and transactions it looks up to answer. Account numbers are never sent.
 - You can check your API usage and spending at https://console.anthropic.com.
 
 ---
@@ -222,6 +245,9 @@ The first time you start the app, it adds one example goal per life area plus a 
 | Calendar keeps asking to reconnect every week | The app is still in "Testing" in Google Cloud. Publish it (step 5 above) and connect once more. |
 | Email says *"The Gmail API isn't turned on"* | Do step 1 of "Connecting Gmail" (enable the Gmail API in the right project), wait a minute, and try again. |
 | Email says *"Gmail access wasn't fully granted"* | Click **Connect Gmail** again and tick every box on Google's permission screen. |
+| Finances says the Setup Token *"was already used or is invalid"* | Each token works once. Create a new one on the SimpleFIN Bridge website and paste it. |
+| Finances says SimpleFIN *"no longer accepts this app's access"* | Access was removed on the SimpleFIN side. Click **Connection… → Disconnect**, then connect again with a new token. |
+| A transaction is in the wrong category | Click it on the **Transactions** tab and pick the right one (tick "all similar" so it sticks). |
 | Double-clicking the icon does nothing, or an error box appears | Look in `C:\Users\<you>\LifeControlCenter\data\app.log` for details, or double-click `start.bat` in that folder to see the app's messages as it starts. |
 
 ---
@@ -249,6 +275,7 @@ LifeControlCenter/
 │       ├── calendar/        ← Google sign-in (OAuth) and Calendar events
 │       ├── email/           ← Gmail: search, read, send; the email AI assistant
 │       ├── shopping/        ← shopping list (needs/wants) and reading product links
+│       ├── finances/        ← SimpleFIN sync, categories, budgets, cash flow; the finance AI assistant
 │       └── assistant/       ← command bar: Claude prompt, JSON schema, apply + undo
 └── frontend/                ← what you see in the browser (plain HTML/CSS/JS, no build step)
     ├── index.html, styles.css
@@ -259,9 +286,9 @@ LifeControlCenter/
         └── views/           ← one file per page
 ```
 
-**Adding a new module later (e.g. Finances):**
-1. Backend: create `backend/modules/finances/` with a `router` (its API endpoints) and optional `on_startup`, then add it to the `MODULES` list in `backend/modules/__init__.py`. (`backend/modules/calendar/` is a good example.)
-2. Frontend: add `frontend/js/views/finances.js` with a `render(view)` function, then in `frontend/js/modules.js` import it and replace `comingSoon: true` with `view: finances`.
+**Adding a new module later (e.g. Follow-ups):**
+1. Backend: create `backend/modules/followups/` with a `router` (its API endpoints) and optional `on_startup`, then add it to the `MODULES` list in `backend/modules/__init__.py`. (`backend/modules/shopping/` is a good example.)
+2. Frontend: add `frontend/js/views/followups.js` with a `render(view)` function, then in `frontend/js/modules.js` import it and replace `comingSoon: true` with `view: followups`.
 3. To let the command bar control it: add new action types to the schema and prompt in `backend/modules/assistant/claude_client.py`, and handle them in `actions.py`.
 
 **How the command bar works under the hood:** the backend sends Claude your sentence, today's date and a compact list of your goals and tasks with their ID numbers. The request uses *structured outputs*, which forces Claude's reply to be JSON matching a fixed schema (`intent`, `reply`, `actions`). The backend checks every action and applies them all together in one step: if any action is invalid, nothing changes. Before changing anything it saves the old version of each item, which is what **Undo** puts back.

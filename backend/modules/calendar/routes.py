@@ -45,6 +45,7 @@ def status():
     return {
         "client_configured": google.load_client() is not None,
         "connected": google.is_connected(),
+        "gmail": google.has_gmail(),
         "redirect_uri": google.REDIRECT_URI,
         "last_error": google.last_error,
     }
@@ -57,23 +58,25 @@ def upload_client(body: ClientIn):
 
 
 @router.get("/connect")
-def connect():
+def connect(return_to: str = "calendar"):
     google.last_error = None
-    return {"url": _run(google.authorization_url)}
+    return {"url": _run(google.authorization_url, return_to)}
 
 
 @router.get("/oauth/callback")
 def oauth_callback(code: str | None = None, state: str | None = None, error: str | None = None):
     """Google sends you back here after you approve (or cancel) access."""
+    page = google._pending.get(state or "", ("", "calendar"))[1]
     if error:
+        google._pending.pop(state or "", None)
         google.last_error = "Google sign-in was cancelled." if error == "access_denied" else f"Google said: {error}"
     else:
         try:
-            google.finish_sign_in(code or "", state or "")
+            page = google.finish_sign_in(code or "", state or "")
             google.last_error = None
         except CalendarError as e:
             google.last_error = str(e)
-    return RedirectResponse("/#/calendar")
+    return RedirectResponse(f"/#/{page}")
 
 
 @router.post("/disconnect")

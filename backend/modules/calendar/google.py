@@ -23,7 +23,12 @@ import urllib.request
 
 from ... import config
 
-SCOPE = "https://www.googleapis.com/auth/calendar.events"
+CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events"
+GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+# What the app asks for: your calendar events, reading Gmail, and sending
+# email (the app only sends after you click Send). Nothing else.
+SCOPES = [CALENDAR_SCOPE, GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE]
 REDIRECT_URI = "http://localhost:8000/api/calendar/oauth/callback"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -34,7 +39,7 @@ DATA_DIR = config.PROJECT_ROOT / "data"
 CLIENT_FILE = DATA_DIR / "google_client.json"
 TOKEN_FILE = DATA_DIR / "google_token.json"
 
-_pending: dict[str, str] = {}   # sign-in attempts in progress: state -> PKCE verifier
+_pending: dict[str, tuple[str, str]] = {}  # sign-ins in progress: state -> (PKCE verifier, page to return to)
 last_error: str | None = None   # shown on the Calendar page after a failed sign-in
 
 
@@ -120,18 +125,19 @@ def _b64url(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
 
 
-def authorization_url() -> str:
+def authorization_url(return_to: str = "calendar") -> str:
     client = load_client()
     if not client:
         raise CalendarError("Upload your Google client file first (step 1 on the Calendar page).")
     verifier = _b64url(secrets.token_bytes(48))
     state = _b64url(secrets.token_bytes(16))
-    _pending[state] = verifier
+    _pending[state] = (verifier, return_to if return_to in ("calendar", "email") else "calendar")
     return AUTH_URL + "?" + urllib.parse.urlencode({
         "client_id": client["client_id"],
         "redirect_uri": REDIRECT_URI,
         "response_type": "code",
-        "scope": SCOPE,
+        "scope": " ".join(SCOPES),
+        "include_granted_scopes": "true",
         "access_type": "offline",        # get a refresh token, so you stay connected
         "prompt": "consent",
         "state": state,
@@ -140,10 +146,12 @@ def authorization_url() -> str:
     })
 
 
-def finish_sign_in(code: str, state: str) -> None:
-    verifier = _pending.pop(state, None)
-    if verifier is None:
-        raise CalendarError("That sign-in link expired. Click “Connect Google Calendar” again.")
+def finish_sign_in(code: str, state: str) -> str:
+    """Swap Google's one-time code for a token. Returns the page to go back to."""
+    pending = _pending.pop(state, None)
+    if pending is None:
+        raise CalendarError("That sign-in link expired. Click “Connect” again.")
+    verifier, return_to = pending
     client = load_client()
     status, data = http_request("POST", TOKEN_URL, form={
         "code": code, "client_id": client["client_id"], "client_secret": client["client_secret"],
@@ -154,13 +162,16 @@ def finish_sign_in(code: str, state: str) -> None:
     if not data.get("refresh_token"):
         raise CalendarError("Google didn't provide a long-term token. Click Connect again and approve access.")
     _save_token(data)
+    return return_to
 
 
-def _save_token(data: dict, refresh_token: str | None = None) -> None:
+def _save_token(data: dict, refresh_token: str | None = None, scope: str | None = None) -> None:
     token = {
         "access_token": data["access_token"],
         "refresh_token": data.get("refresh_token") or refresh_token,
         "expires_at": time.time() + int(data.get("expires_in", 3600)),
+        # Which permissions Google actually granted (you can untick some).
+        "scope": data.get("scope") or scope or CALENDAR_SCOPE,
     }
     DATA_DIR.mkdir(exist_ok=True)
     TOKEN_FILE.write_text(json.dumps(token, indent=2), encoding="utf-8")
@@ -175,6 +186,16 @@ def _load_token() -> dict | None:
 
 def is_connected() -> bool:
     return bool(load_client() and _load_token())
+
+
+def granted_scopes() -> set[str]:
+    token = _load_token()
+    return set((token or {}).get("scope", CALENDAR_SCOPE).split()) if token else set()
+
+
+def has_gmail() -> bool:
+    scopes = granted_scopes()
+    return GMAIL_READ_SCOPE in scopes and GMAIL_SEND_SCOPE in scopes
 
 
 def disconnect() -> None:
@@ -205,7 +226,7 @@ def _access_token(force_refresh: bool = False) -> str:
                 raise NotConnected("Google Calendar access expired or was removed. "
                                    "Reconnect it on the Calendar page.")
             raise CalendarError(f"Couldn't refresh Google access ({_google_message(data) or status}).")
-        _save_token(data, refresh_token=token["refresh_token"])
+        _save_token(data, refresh_token=token["refresh_token"], scope=token.get("scope"))
         return data["access_token"]
     return token["access_token"]
 
@@ -219,13 +240,18 @@ def _google_message(data) -> str | None:
     return data.get("error_description") or err
 
 
-def api(method: str, path: str = "", *, params=None, body=None):
-    """Call the Calendar API for your primary calendar. Returns the JSON reply."""
-    url = API_BASE + path
+def authed_request(method: str, url: str, *, params=None, body=None):
+    """Call any Google API with your saved sign-in. Returns (status, json)."""
     status, data = http_request(method, url, params=params, body=body, token=_access_token())
     if status == 401:  # token expired early: refresh once and retry
         status, data = http_request(method, url, params=params, body=body,
                                     token=_access_token(force_refresh=True))
+    return status, data
+
+
+def api(method: str, path: str = "", *, params=None, body=None):
+    """Call the Calendar API for your primary calendar. Returns the JSON reply."""
+    status, data = authed_request(method, API_BASE + path, params=params, body=body)
     if status >= 400:
         if status == 404 or status == 410:
             raise CalendarError("That event wasn't found in Google Calendar (it may have been deleted).")

@@ -5,6 +5,7 @@
 import * as area from "./views/area.js";
 import * as calendar from "./views/calendar.js";
 import * as dashboard from "./views/dashboard.js";
+import * as email from "./views/email.js";
 import * as goals from "./views/goals.js";
 import * as routines from "./views/routines.js";
 import * as settings from "./views/settings.js";
@@ -16,12 +17,11 @@ export const MODULES = [
   { id: "tasks", label: "Tasks", icon: "check", view: tasks },
   { id: "routines", label: "Routines", icon: "repeat", view: routines },
   { id: "calendar", label: "Calendar", icon: "calendar", view: calendar },
+  { id: "email", label: "Email", icon: "mail", view: email },
 
   // Future phases (shown as "Coming soon").
   { id: "finances", label: "Finances", icon: "wallet", comingSoon: true,
     blurb: "Track spending, budgets and savings goals alongside the rest of your life." },
-  { id: "email", label: "Email", icon: "mail", comingSoon: true,
-    blurb: "Surface emails that need a reply and turn them into tasks with one sentence." },
   { id: "followups", label: "Follow-ups", icon: "bell", comingSoon: true,
     blurb: "Reminders that nudge you about things you promised to do or are waiting on." },
   { id: "shopping", label: "Shopping list", icon: "cart", comingSoon: true,

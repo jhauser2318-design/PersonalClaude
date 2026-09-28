@@ -11,7 +11,7 @@ import re
 from datetime import date, datetime, timedelta
 
 from ...areas import AREA_IDS
-from ...database import register_schema, row_to_dict
+from ...database import get_setting, register_schema, row_to_dict, set_setting
 from ..goals.service import ValidationError, now_iso
 
 register_schema(
@@ -225,6 +225,47 @@ def day_plan(conn, day: str) -> dict:
     blocks = list_blocks(conn, day)
     return {"date": day, "blocks": blocks, "template_used": template_used,
             "done": sum(b["done"] for b in blocks), "total": len(blocks)}
+
+
+# ---------------------------------------------------------------------------
+# Common blocks (the palette you drag onto your day)
+# ---------------------------------------------------------------------------
+
+DEFAULT_PRESETS = [
+    {"title": "Work", "minutes": 240, "area": "work"},
+    {"title": "Deep work", "minutes": 120, "area": "work"},
+    {"title": "Meeting", "minutes": 60, "area": "work"},
+    {"title": "Gym", "minutes": 60, "area": "health"},
+    {"title": "Run", "minutes": 45, "area": "health"},
+    {"title": "Study", "minutes": 120, "area": "education"},
+    {"title": "CPA study", "minutes": 120, "area": "education"},
+    {"title": "Reading", "minutes": 30, "area": "education"},
+    {"title": "Friends", "minutes": 120, "area": "social"},
+    {"title": "Lunch", "minutes": 45, "area": None},
+    {"title": "Errands", "minutes": 60, "area": None},
+    {"title": "Break", "minutes": 15, "area": None},
+]
+
+
+def list_presets(conn) -> list[dict]:
+    raw = get_setting(conn, "schedule_presets")
+    try:
+        presets = json.loads(raw) if raw else DEFAULT_PRESETS
+    except ValueError:
+        presets = DEFAULT_PRESETS
+    return presets
+
+
+def save_presets(conn, presets: list[dict]) -> list[dict]:
+    clean = []
+    for p in presets[:30]:
+        title = (p.get("title") or "").strip()
+        if not title:
+            continue
+        minutes = max(5, min(12 * 60, int(p.get("minutes") or 60)))
+        clean.append({"title": title[:40], "minutes": minutes, "area": p.get("area") if p.get("area") in AREA_IDS else None})
+    set_setting(conn, "schedule_presets", json.dumps(clean))
+    return clean
 
 
 # ---------------------------------------------------------------------------

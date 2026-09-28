@@ -16,7 +16,6 @@ from ..modules.cpa import service as cpa
 from ..modules.finances import planning
 from ..modules.fitness import service as fitness
 from ..modules.home import service as home
-from ..modules.meals import service as meals
 from ..modules.people import service as people
 from ..modules.review import service as review
 from ..modules.schedule import service as schedule
@@ -278,7 +277,7 @@ def _seed_finances(conn, today: date, rnd: random.Random) -> None:
 
 
 def _seed_life(conn, today: date, rnd: random.Random, g: dict) -> None:
-    """Schedule, CPA planner, people, workouts, meals, home & admin, weekly review, bills and savings."""
+    """Schedule, CPA planner, people, workouts, home & admin, weekly review, bills and savings."""
     D = lambda n: today + timedelta(days=n)  # noqa: E731
     habit_id = lambda title: conn.execute("SELECT id FROM habits WHERE title = ?", (title,)).fetchone()[0]  # noqa: E731
 
@@ -352,30 +351,17 @@ def _seed_life(conn, today: date, rnd: random.Random, g: dict) -> None:
                 {"exercise": "Romanian deadlift", "sets": 3, "reps": 8, "weight": 135}]}
         fitness.save_workout(conn, w, log_routine=False)
     fitness.set_gym_habit(conn, habit_id("Go to the gym"))
+    for back in range(13, -1, -1):  # an Apple Watch's daily numbers
+        day = D(-back).isoformat()
+        conn.execute("INSERT INTO health_daily (date, steps, active_kcal, exercise_min, resting_hr, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                     (day, rnd.randint(5200, 12800) if back else 6120, rnd.randint(380, 760) if back else 412,
+                      rnd.randint(18, 70) if back else 34, rnd.randint(55, 61), _stamp(D(-back), 21)))
+    set_setting(conn, "health_last_import", datetime.now().isoformat(timespec="seconds"))
+    conn.execute("UPDATE workouts SET source = 'apple', calories = minutes * 11, notes = 'from Apple Health' WHERE kind = 'cardio'")
     weight = 184.0
     for back in range(84, -1, -3):
         weight += rnd.uniform(-0.8, 0.5)
         fitness.log_weight(conn, round(weight, 1), D(-back).isoformat())
-
-    # --- Meals -----------------------------------------------------------------------
-    recipes = {}
-    for name, ingredients, minutes in [
-        ("Chicken rice bowls", ["Chicken thighs", "Jasmine rice", "Broccoli", "Teriyaki sauce"], 30),
-        ("Overnight oats", ["Rolled oats", "Greek yogurt", "Blueberries", "Chia seeds"], 5),
-        ("Turkey chili", ["Ground turkey", "Kidney beans", "Diced tomatoes", "Onion", "Chili powder"], 45),
-        ("Salmon & sweet potato", ["Salmon fillets", "Sweet potatoes", "Asparagus", "Lemon"], 35),
-        ("Pasta primavera", ["Penne", "Zucchini", "Cherry tomatoes", "Parmesan"], 25),
-    ]:
-        recipes[name] = meals.save_recipe(conn, {"name": name, "ingredients": ingredients, "minutes": minutes})["id"]
-    start = meals.week_start(today.isoformat())
-    dinners = ["Chicken rice bowls", "Turkey chili", "Salmon & sweet potato", "Turkey chili", "Pasta primavera", None, "Chicken rice bowls"]
-    for i, dinner in enumerate(dinners):
-        day = (start + timedelta(days=i)).isoformat()
-        meals.save_meal(conn, {"date": day, "slot": "breakfast", "recipe_id": recipes["Overnight oats"]})
-        if dinner:
-            meals.save_meal(conn, {"date": day, "slot": "dinner", "recipe_id": recipes[dinner]})
-        else:
-            meals.save_meal(conn, {"date": day, "slot": "dinner", "title": "Dinner out with friends"})
 
     # --- Home & admin ----------------------------------------------------------------
     for name, cat, n, unit, last, notes in [

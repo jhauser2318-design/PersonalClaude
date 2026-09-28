@@ -4,7 +4,7 @@ one with "gym" or "workout" in its name, or the one picked on the page).
 """
 from datetime import date, timedelta
 
-from ...database import get_setting, register_schema, row_to_dict, set_setting
+from ...database import add_column, get_setting, register_schema, row_to_dict, set_setting
 from ..goals.service import ValidationError, now_iso
 
 register_schema(
@@ -17,6 +17,8 @@ register_schema(
         minutes    REAL,
         distance   REAL,                              -- miles
         notes      TEXT NOT NULL DEFAULT '',
+        source     TEXT NOT NULL DEFAULT 'manual',    -- manual or apple (Apple Health)
+        calories   REAL,
         created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS workout_sets (
@@ -33,6 +35,9 @@ register_schema(
     );
     """
 )
+
+add_column("workouts", "source", "TEXT NOT NULL DEFAULT 'manual'")
+add_column("workouts", "calories", "REAL")
 
 KINDS = ["strength", "cardio", "sport", "other"]
 
@@ -197,7 +202,13 @@ def overview(conn) -> dict:
         "habit": {"id": habit["id"], "title": habit["title"]} if habit else None,
         "exercises": sorted({r[0] for r in conn.execute("SELECT DISTINCT exercise FROM workout_sets")}),
         "kinds": KINDS,
+        "health": _health(conn),
     }
+
+
+def _health(conn) -> dict:
+    from . import health
+    return health.summary(conn)
 
 
 def context_line(conn) -> str:

@@ -71,7 +71,9 @@ async def phone_sign_in(request, call_next):
     """Requests from other devices (through Tailscale) need a signed-in device.
     The app's own window on the PC never does."""
     path = request.url.path
-    if remote_auth.is_remote(request.headers) and path.startswith("/api/") and not path.startswith("/api/auth/"):
+    # /api/health/import checks its own key (the iPhone's Health app can't sign in).
+    if remote_auth.is_remote(request.headers) and path.startswith("/api/") and not path.startswith("/api/auth/") \
+            and path != "/api/health/import":
         if path.startswith(PC_ONLY_PAGES):
             return HTMLResponse("<p style='font:16px system-ui;padding:24px'>Connecting Google only works on your PC: "
                                 "open the app there and click Connect.</p>", status_code=400)

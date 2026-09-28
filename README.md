@@ -170,6 +170,7 @@ If Claude isn't sure what you mean (for example, two goals could match), it **as
 
 **Schedule** (sidebar → Plan) is your own day in time blocks: gym 6:30–7:30, deep work, CPA study 7–9pm. It stays in the app. Nothing goes on Google Calendar unless you explicitly ask (“put the dentist Thursday 3pm **on my calendar**”). Your Google events appear faded next to your blocks so you can plan around them.
 
+- **Drag** common blocks (Work, Gym, Study, CPA study…) from the top of the Schedule onto a time. Drag a block to move it, or drag its bottom edge to change its length (on your phone, use the ⋮⋮ grip). Edit the list of common blocks with the pencil next to them.
 - Plan a day the way you like it, then **Save this day as a typical day** and pick weekdays (e.g. Workday = Mon–Fri). New days fill in from it automatically.
 - Tell the AI bar “Gym 6–7am tomorrow and CPA study 7–9pm” or “Plan my afternoon around my meetings”.
 - The **timer button** at the top starts a focus session (25/50/90 minutes). Link it to a routine and the time counts toward it (50 minutes = 0.83 hours of CPA study).
@@ -180,7 +181,7 @@ If Claude isn't sure what you mean (for example, two goals could match), it **as
 - **Weekly review** (Plan): the week's numbers across the app, what went well / what to change, next week's top 3 priorities (one click makes them tasks), and an optional AI summary. A reminder pops up Sunday at 6pm.
 - **People** (Life): birthdays, when you last talked, and “reach out every N days” nudges. “Called Mom about the trip” logs it.
 - **Workouts** (Life): sets × reps × weight or cardio minutes, personal records (estimated 1-rep max), workouts per week and body weight. Logging a workout also checks off your gym routine.
-- **Meals** (Life): a week of meals and a recipe box; one click puts the week's ingredients on your shopping needs (skipping ones already there).
+  - **Apple Health / Apple Watch:** click **Connect Apple Health** on the Workouts page. Your iPhone sends workouts, steps, active energy, exercise minutes, resting heart rate and weight here through the Health Auto Export app (its automatic sending is a paid upgrade), over Tailscale. The page shows your private address and the steps.
 - **Home & admin**: upkeep that repeats (HVAC filter, oil change) with the next due date, and important dates and documents (passport, registration, insurance) with a heads-up ahead of time.
 - **Finances → Bills**: a month calendar of bills (found from your transactions, your loans, and ones you add), a subscriptions list with the yearly cost of each and a “cancel it” list. A reminder comes 2 days before each bill.
 - **Finances → Savings**: savings goals with the monthly amount needed to hit each target date; link one to a savings account and it updates with every sync.

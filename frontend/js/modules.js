@@ -11,7 +11,6 @@ import * as finances from "./views/finances.js";
 import * as followups from "./views/followups.js";
 import * as goals from "./views/goals.js";
 import * as home from "./views/home.js";
-import * as meals from "./views/meals.js";
 import * as people from "./views/people.js";
 import * as review from "./views/review.js";
 import * as routines from "./views/routines.js";
@@ -33,7 +32,6 @@ export const MODULES = [
   { id: "review", label: "Weekly review", icon: "review", view: review, group: "Plan" },
   { id: "people", label: "People", icon: "users", view: people, group: "Life" },
   { id: "workouts", label: "Workouts", icon: "dumbbell", view: workouts, group: "Life" },
-  { id: "meals", label: "Meals", icon: "utensils", view: meals, group: "Life" },
   { id: "followups", label: "Follow-ups", icon: "bell", view: followups, group: "Life" },
   { id: "email", label: "Email", icon: "mail", view: email, group: "Life" },
   { id: "finances", label: "Finances", icon: "wallet", view: finances, group: "Money" },

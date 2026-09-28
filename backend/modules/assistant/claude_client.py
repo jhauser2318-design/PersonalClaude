@@ -260,7 +260,7 @@ def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | Non
                      f"{'done' if b['done'] else 'open'}")
     lines += ["", "PEOPLE (id | name | relation | birthday MM-DD | last contact | reach out):"]
     lines += extra.get("people") or ["(none)"]
-    for key in ("cpa", "workouts", "meals", "home"):
+    for key in ("cpa", "workouts", "home"):
         if extra.get(key):
             lines += ["", extra[key]]
     return "\n".join(lines)

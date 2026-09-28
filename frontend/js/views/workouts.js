@@ -62,8 +62,8 @@ export async function render(view) {
         <header><h2>Recent workouts</h2></header>
         ${o.workouts.length ? `<ul class="fin-list">${o.workouts.slice(0, 15).map((w) => `
           <li data-w="${w.id}" class="fit-row"><div>
-            <div class="fin-li-title">${esc(w.title)} <span class="pill">${esc(w.kind)}</span></div>
-            <div class="fin-li-sub">${esc(fmtDate(w.date))}${w.minutes ? ` · ${w.minutes} min` : ""}${w.distance ? ` · ${w.distance} mi` : ""}${w.volume ? ` · ${w.volume.toLocaleString()} lb volume` : ""}</div>
+            <div class="fin-li-title">${esc(w.title)} <span class="pill">${esc(w.kind)}</span>${w.source === "apple" ? ` <span class="pill apple">⌚ Apple Health</span>` : ""}</div>
+            <div class="fin-li-sub">${esc(fmtDate(w.date))}${w.minutes ? ` · ${w.minutes} min` : ""}${w.calories ? ` · ${Math.round(w.calories)} kcal` : ""}${w.distance ? ` · ${w.distance} mi` : ""}${w.volume ? ` · ${w.volume.toLocaleString()} lb volume` : ""}</div>
             ${w.sets.length ? `<div class="fin-li-sub">${w.sets.map(setText).join(" · ")}</div>` : ""}
           </div><button class="icon-btn" aria-label="Edit">${icon("edit")}</button></li>`).join("")}</ul>`
           : `<div class="empty">No workouts yet.</div>`}
@@ -77,6 +77,7 @@ export async function render(view) {
           : `<div class="empty">Log sets with weights to see records.</div>`}
       </section>
     </div>
+    ${healthCard(o.health)}
     <section class="card fin-card" style="margin-top:14px">
       <header><h2>Gym routine</h2></header>
       <label class="field"><span>Logging a workout checks off this routine</span>
@@ -92,6 +93,7 @@ export async function render(view) {
     const row = e.target.closest("[data-w]");
     if (row) openWorkout(o.workouts.find((w) => w.id === Number(row.dataset.w)), o, refresh);
   });
+  root.querySelector("#hk-setup").onclick = () => openHealthSetup(refresh);
   root.querySelector("#fit-habit").onchange = async (e) => {
     await api.put("/fitness/habit", { habit_id: Number(e.target.value) });
     toast("Saved");
@@ -175,4 +177,65 @@ function openWeight(o, onChange) {
       onChange();
     } catch (err) { showError(form, err); }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Apple Health
+// ---------------------------------------------------------------------------
+
+function healthCard(h) {
+  const t = h.today || {};
+  const stat = (label, v, unit) => `<div class="hk-stat"><div class="eyebrow">${label}</div><b>${v == null ? "—" : Math.round(v).toLocaleString()}</b>${v == null ? "" : `<small>${unit}</small>`}</div>`;
+  const steps = h.days.map((d) => d.steps || 0);
+  const max = Math.max(1, ...steps);
+  return `<section class="card fin-card" style="margin-top:14px">
+    <header><h2>⌚ Apple Health</h2>
+      <button class="btn small ${h.last_import ? "" : "primary"}" id="hk-setup">${h.last_import ? "Connection details" : "Connect Apple Health"}</button></header>
+    ${h.last_import ? `
+      <div class="hk-stats">
+        ${stat("Steps today", t.steps, "")}${stat("Active energy", t.active_kcal, " kcal")}
+        ${stat("Exercise", t.exercise_min, " min")}${stat("Resting heart rate", t.resting_hr, " bpm")}
+      </div>
+      ${h.days.length > 1 ? `<div class="hk-bars" role="img" aria-label="Steps, last 14 days">${h.days.map((d) =>
+        `<span style="height:${Math.max(3, (100 * (d.steps || 0)) / max)}%" title="${esc(d.date)}: ${Math.round(d.steps || 0).toLocaleString()} steps"></span>`).join("")}</div>
+        <div class="muted small">Steps, last ${h.days.length} days</div>` : ""}
+      <p class="fin-fine">Last update from your iPhone: ${esc(new Date(h.last_import).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }))}. Apple Watch workouts show up in the list above and check off your gym routine.</p>`
+      : `<p class="muted small" style="margin:0">Send your Apple Watch workouts, steps, active energy, resting heart rate and weight here automatically from your iPhone.</p>`}
+  </section>`;
+}
+
+async function openHealthSetup(onChange) {
+  const s = await api.get("/fitness/health/setup");
+  if (s.demo) { toast("Turn demo mode off to connect Apple Health"); return; }
+  const dlg = openDialog({
+    title: "Connect Apple Health", style: "--area:#34d399",
+    body: `
+      <p style="margin:0">Apple doesn't let apps on a PC read Health directly, so your iPhone sends the data here over Tailscale.
+        The easiest way is the <b>Health Auto Export</b> app (its automatic sending, the “REST API” automation, is part of its paid upgrade).</p>
+      ${s.url ? `<div class="field"><span>Your address (keep it private: it works like a password)</span>
+          <div class="hk-url"><input type="text" readonly value="${esc(s.url)}" id="hk-url"><button class="btn small" id="hk-copy">Copy</button></div></div>`
+        : `<div class="fin-alert">Phone access (Tailscale) isn't on yet. Turn it on in <b>Settings → Phone &amp; devices</b> first, then come back here for your address.</div>`}
+      <ol class="hk-steps">
+        <li>On your iPhone, install <b>Health Auto Export – JSON+CSV</b> from the App Store and allow it to read Health data (Steps, Active Energy, Exercise Time, Resting Heart Rate, Weight, Workouts).</li>
+        <li>In the app, open <b>Automations</b> → <b>+</b> (new automation) → type <b>REST API</b>.</li>
+        <li><b>URL</b>: paste the address above. <b>Export format</b>: JSON.</li>
+        <li>Pick the data: <b>Health Metrics</b> (Step Count, Active Energy, Apple Exercise Time, Resting Heart Rate, Weight &amp; Body Mass) and turn on <b>Workouts</b>.</li>
+        <li>Set it to sync every hour (or as often as you like) and turn the automation on. Use its <b>manual export</b> once to send the last few days now.</li>
+      </ol>
+      <p class="muted small" style="margin:0">Your iPhone needs Tailscale connected and your PC needs to be on for a sync to go through; missed syncs catch up next time. Sending the same workout twice doesn't duplicate it.
+        Health data always goes to your real data, never to demo mode.</p>
+      ${s.last_import ? `<p class="muted small" style="margin:0">Last received: ${esc(new Date(s.last_import).toLocaleString())}</p>` : ""}`,
+    foot: `<button class="btn danger" id="hk-reset">New address</button><div class="right"><button class="btn primary" data-close>Done</button></div>`,
+  });
+  dlg.querySelector("#hk-copy")?.addEventListener("click", async () => {
+    const input = dlg.querySelector("#hk-url");
+    try { await navigator.clipboard.writeText(input.value); } catch (e) { input.select(); document.execCommand("copy"); }
+    toast("Copied");
+  });
+  dlg.querySelector("#hk-reset").onclick = async () => {
+    if (!confirm("Make a new address? The old one stops working, so you'll need to paste the new one into Health Auto Export.")) return;
+    await api.post("/fitness/health/new-key");
+    dlg.close();
+    openHealthSetup(onChange);
+  };
 }

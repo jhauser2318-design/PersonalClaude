@@ -76,12 +76,12 @@ export function areaOptions(selected) {
 
 // ---------- Toast ----------
 let toastTimer;
-export function toast(message) {
+export function toast(message, ms = 2600) {
   const el = document.getElementById("toast");
   el.textContent = message;
   el.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+  toastTimer = setTimeout(() => el.classList.remove("show"), ms);
 }
 
 // ---------- Dialogs ----------

@@ -15,9 +15,13 @@ import json
 import logging
 import os
 import shutil
+import socket
+import ssl
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 from datetime import datetime
@@ -32,13 +36,85 @@ KEEP = {".venv", "data", ".env", ".git"}   # never overwritten by an update
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0  # Windows: don't flash a console
 
 
-def _get(url: str, timeout: float) -> bytes:
+def _ssl_contexts():
+    """Normal certificate check first; then Mozilla's certificate list (certifi),
+    which helps on computers whose certificate store Python can't use."""
+    yield None
+    try:
+        import certifi
+        yield ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return
+
+
+def _get(url: str, timeout: float, attempts: int = 2) -> bytes:
     req = urllib.request.Request(url, headers={
         "User-Agent": "LifeControlCenter-updater",
         "Accept": "application/vnd.github+json",
     })
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.read()
+    last_error = None
+    for attempt in range(attempts):
+        for context in _ssl_contexts():
+            try:
+                with urllib.request.urlopen(req, timeout=timeout, context=context) as resp:
+                    return resp.read()
+            except urllib.error.URLError as e:
+                last_error = e
+                if isinstance(getattr(e, "reason", None), ssl.SSLError):
+                    continue  # certificate problem: try the other certificate list
+                break
+            except (TimeoutError, OSError) as e:
+                last_error = e
+                break
+        if isinstance(last_error, urllib.error.HTTPError) and last_error.code < 500 and last_error.code != 429:
+            break  # retrying won't help
+        time.sleep(1.5)
+    raise last_error
+
+
+def describe_error(e: Exception) -> str:
+    """A plain-English reason, shown in the app and written to the log."""
+    reason = getattr(e, "reason", e)
+    if isinstance(e, urllib.error.HTTPError):
+        if e.code in (403, 429):
+            return "GitHub is limiting requests from your network right now. Try again in an hour."
+        return f"GitHub answered with an error ({e.code})."
+    if isinstance(reason, ssl.SSLError) or "CERTIFICATE" in str(reason).upper():
+        return ("A secure connection to GitHub couldn't be verified. Security software "
+                "(antivirus or firewall) may be inspecting web traffic.")
+    if isinstance(reason, (TimeoutError, socket.timeout)) or "timed out" in str(reason).lower():
+        return "GitHub took too long to answer. Check your internet connection and try again."
+    if isinstance(reason, socket.gaierror):
+        return "Couldn't find github.com. Check that you're connected to the internet."
+    return f"Couldn't connect to GitHub ({reason})."
+
+
+def latest_commit() -> str:
+    """The id of the newest version on GitHub.
+
+    Asks GitHub the same way `git` does (the address used for downloads), which,
+    unlike GitHub's API, isn't limited to 60 checks an hour per network.
+    """
+    try:
+        raw = _get(f"https://github.com/{REPO}.git/info/refs?service=git-upload-pack", timeout=15)
+        for line in raw.decode("utf-8", "replace").splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[1] == f"refs/heads/{BRANCH}":
+                sha = parts[0][-40:]
+                if len(sha) == 40:
+                    return sha
+    except Exception as e:
+        logging.info("Git-style version check failed (%s); trying GitHub's API", e)
+    return json.loads(_get(f"https://api.github.com/repos/{REPO}/commits/{BRANCH}", timeout=15))["sha"]
+
+
+def _commit_message(sha: str) -> str:
+    """What changed, for the "Updated to…" banner (optional; blank if unavailable)."""
+    try:
+        return json.loads(_get(f"https://api.github.com/repos/{REPO}/commits/{sha}",
+                               timeout=8, attempts=1)).get("commit", {}).get("message", "")
+    except Exception:
+        return ""
 
 
 def _digest(path: Path) -> str | None:
@@ -77,11 +153,10 @@ def update() -> dict:
     """
     result = {"updated": False, "launcher_changed": False, "error": None}
     try:
-        info = json.loads(_get(f"https://api.github.com/repos/{REPO}/commits/{BRANCH}", timeout=6))
-        latest = info["sha"]
+        latest = latest_commit()
     except Exception as e:
-        logging.info("Update check skipped (%s)", e)
-        result["error"] = "Couldn't reach GitHub to check for updates. Are you online?"
+        result["error"] = describe_error(e)
+        logging.warning("Update check failed: %s (%r)", result["error"], e)
         return result
 
     if read_version().get("sha") == latest:
@@ -108,7 +183,8 @@ def update() -> dict:
                     shutil.copy2(path, dest)
     except Exception as e:
         logging.warning("Update failed, keeping the current version (%s)", e)
-        result["error"] = f"The update couldn't be installed ({e}). The current version is still in place."
+        reason = describe_error(e) if isinstance(e, urllib.error.URLError) else str(e)
+        result["error"] = f"The update couldn't be installed ({reason}). The current version is still in place."
         return result
 
     if _digest(ROOT / "requirements.txt") != before["requirements.txt"]:
@@ -121,7 +197,7 @@ def update() -> dict:
 
     _write_version({
         "sha": latest,
-        "summary": _summary(info.get("commit", {}).get("message", "")),
+        "summary": _summary(_commit_message(latest)),
         "updated_at": datetime.now().isoformat(timespec="seconds"),
         "show_notice": True,
     })

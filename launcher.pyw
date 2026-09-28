@@ -15,6 +15,11 @@ console window). It:
 If an older copy of the app is still running (for example from before an
 update), it's stopped first so you always get the current version.
 
+Background mode (Settings → Phone & devices): a Startup-folder shortcut runs
+"launcher.pyw --background" when you sign in to Windows. It starts the app
+without a window, keeps it running (so your phone can reach it), and checks
+GitHub for updates every hour.
+
 If something goes wrong, details are written to data/app.log.
 (start.bat still works too, and shows the server's messages in a window.)
 """
@@ -41,6 +46,9 @@ LOCK_PORT = 47819  # held while a launcher is running, so two clicks don't start
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0  # Windows: don't flash a console for helpers
 
 IDLE_LIMIT = int(os.environ.get("LCC_IDLE_LIMIT", 180))  # seconds without a check-in before the app stops
+UPDATE_EVERY = int(os.environ.get("LCC_UPDATE_EVERY", 3600))  # background mode: seconds between update checks
+HOST_FILE = DATA / "host.json"  # {"always_on": true} when background mode is on
+BACKGROUND = "--background" in sys.argv
 
 # Set when the launcher restarts itself after updating its own code.
 AFTER_UPDATE = os.environ.get("LCC_AFTER_UPDATE") == "1"
@@ -48,14 +56,30 @@ AFTER_UPDATE = os.environ.get("LCC_AFTER_UPDATE") == "1"
 
 def requested_page() -> str:
     """Clicking a notification runs "launcher.pyw lifecc://open/<page>": open that page."""
-    arg = sys.argv[1] if len(sys.argv) > 1 else ""
-    if not arg.lower().startswith("lifecc://open/"):
+    arg = next((a for a in sys.argv[1:] if a.lower().startswith("lifecc://open/")), "")
+    if not arg:
         return ""
     page = arg[len("lifecc://open/"):].strip("/")
     return "".join(c for c in page if c.isalnum() or c in "-/")
 
 
 PAGE = requested_page()
+
+
+def always_on() -> bool:
+    """Background mode: keep the app running even with no window open."""
+    try:
+        return bool(json.loads(HOST_FILE.read_text(encoding="utf-8")).get("always_on"))
+    except Exception:
+        return False
+
+
+def restart_after_update() -> None:
+    """Start a fresh launcher on the new version; it takes over from this one."""
+    subprocess.Popen([sys.executable, str(ROOT / "launcher.pyw"), "--background"], cwd=ROOT,
+                     env={**os.environ, "LCC_AFTER_UPDATE": "1"},
+                     creationflags=(0x00000008 | 0x00000200) if os.name == "nt" else 0,
+                     start_new_session=os.name != "nt")
 
 
 def show_error(text: str) -> None:
@@ -164,9 +188,10 @@ def main() -> None:
     sys.stdout = sys.stderr = log_file
     logging.basicConfig(stream=log_file, level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
-    logging.info("Launcher starting%s", " (after update)" if AFTER_UPDATE else "")
+    logging.info("Launcher starting%s%s", " in background mode" if BACKGROUND else "",
+                 " (after update)" if AFTER_UPDATE else "")
 
-    browser = find_browser()
+    browser = None if BACKGROUND else find_browser()
 
     # 1. Show the window straight away with a "Checking for updates..." screen.
     #    (If the app is already running, it switches to it as soon as the
@@ -190,7 +215,7 @@ def main() -> None:
     if server_is_up():
         info = server_info()
         if info is not None and info.get("version") == installed_version():
-            if browser is None:
+            if browser is None and not BACKGROUND:
                 webbrowser.open(f"{URL}/#/{PAGE}" if PAGE else URL)
             return  # the window opened above switches to the running app
         logging.info("An older copy of the app is running (%s); restarting it", info)
@@ -224,19 +249,32 @@ def main() -> None:
                    f"Details are in {LOG}")
         return
 
-    if browser is None:
+    if browser is None and not BACKGROUND:
         logging.info("No Edge/Chrome found; opening the default browser")
         webbrowser.open(f"{URL}/#/{PAGE}" if PAGE else URL)
         thread.join()  # keeps running until you sign out or restart
         return
 
-    # 5. Keep running while the window is open. It checks in every 15 seconds
-    #    (at least once a minute when minimized); after IDLE_LIMIT seconds of
-    #    silence the window must be closed, so stop the app.
+    # 5. Keep running while a window is open (it checks in every 15 seconds,
+    #    at least once a minute when minimized), or all the time in
+    #    background mode. In background mode, also look for updates hourly.
     from backend.main import seconds_since_ping
-    while seconds_since_ping() < IDLE_LIMIT:
+    last_update_check = time.time()
+    while True:
+        if not always_on() and seconds_since_ping() >= IDLE_LIMIT:
+            logging.info("App window closed; stopping the server")
+            break
+        if always_on() and time.time() - last_update_check >= UPDATE_EVERY:
+            last_update_check = time.time()
+            try:
+                import updater
+                if updater.update().get("updated"):
+                    logging.info("Update installed; restarting on the new version")
+                    restart_after_update()
+                    break
+            except Exception as e:  # never let an update check stop the app
+                logging.warning("Background update check failed: %s", e)
         time.sleep(5)
-    logging.info("App window closed; stopping the server")
     server.should_exit = True
     thread.join(timeout=10)
 

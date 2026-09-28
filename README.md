@@ -13,6 +13,7 @@ A personal dashboard that runs on your own computer and opens in your web browse
 - **Shopping list**: things you **need** and **want**, each with what it is, its price and a link to the store. Totals for each, a "Bought" list, and paste-a-link to fill in the name and price.
 - **Finances**: your bank accounts and credit cards (through **SimpleFIN Bridge**, read-only). Cash flow per month, spending by category, monthly budgets with pace tracking, recurring charges and subscriptions, a searchable transaction list, and AI reports and answers ("How much did I spend on dining last month?"). Transactions are sorted into categories by AI; your corrections stick.
 - **Follow-ups & notifications**: a list of things you need to follow up on or are waiting on from others, and **reminders** on tasks, routines and follow-ups that pop up as **Windows notifications**, even when the app is closed. Optional morning briefing and budget alerts.
+- **On your iPhone**: the same app and data on your phone as a home-screen app, linked privately to your PC through Tailscale, updating live on both.
 - **Dashboard**: a "command center" with a progress ring for each area, today's schedule, today's routines, what's due today and this week, overdue items, and an activity feed.
 - **Live command bar**: type normal sentences and Claude (Anthropic's AI) makes the changes for you. Every change can be undone.
 
@@ -230,6 +231,25 @@ How it works: turning notifications on adds a small Windows scheduled task, "Lif
 
 The **Follow-ups** page lists "I need to…" and "Waiting on…" items, every upcoming reminder, and recent notifications.
 
+### Using the app on your iPhone (Tailscale)
+
+Your PC stays the "home base": the app and all your data live there, and your phone opens it through **Tailscale**, a free, private, encrypted link between your own devices. Nothing is opened to the internet. Everything you do on either device shows up on the other within a few seconds.
+
+**On the PC** (open the app → **Settings → Phone & devices** and follow the numbered steps):
+1. **Turn on background mode.** The app then starts quietly when you sign in to Windows, keeps running after you close its window, and installs updates by itself every hour.
+2. **Keep the PC awake**: Windows **Settings → System → Power & battery → Screen and sleep**: set "When plugged in, put my device to sleep after" to **Never** (the screen can still turn off). Laptop: **Control Panel → Power Options → Choose what closing the lid does → When I close the lid (Plugged in): Do nothing**.
+3. **Install Tailscale**: https://tailscale.com/download/windows. Sign in with your Google account.
+4. In the Tailscale admin page (https://login.tailscale.com/admin/dns) turn on **MagicDNS** and **HTTPS Certificates**.
+5. Back in the app, **set a passcode** (6+ characters), then click **Turn on phone access**. If Tailscale opens a page asking you to allow it, approve it and click the button again. A QR code appears.
+
+**On the iPhone:**
+1. Install **Tailscale** from the App Store, sign in with the **same** Google account, allow the VPN configuration, and leave it connected.
+2. Point the **Camera** at the QR code on the PC and open the link in Safari (or type the address shown under the QR code).
+3. Enter your passcode.
+4. Tap **Share → Add to Home Screen → Add**. Open the app from the new icon and enter the passcode once more (the home-screen app keeps its own sign-in, separate from Safari).
+
+Good to know: the phone can reach the app whenever the PC is on, awake and signed in to Windows. Connecting Google (Calendar/Gmail) is done on the PC. Signed-in phones are listed under **Settings → Phone & devices**, where you can sign them out; setting a new passcode signs out every phone.
+
 ### Example data
 
 The first time you start the app, it adds one example goal per life area plus a few tasks, so you can try things out. When you're ready for your own data, go to **Settings → Clear example data**. This removes only the examples, never anything you created. **Load examples again** brings them back.
@@ -267,6 +287,8 @@ The first time you start the app, it adds one example goal per life area plus a 
 | Finances says the Setup Token *"was already used or is invalid"* | Each token works once. Create a new one on the SimpleFIN Bridge website and paste it. |
 | Finances says SimpleFIN *"no longer accepts this app's access"* | Access was removed on the SimpleFIN side. Click **Connection… → Disconnect**, then connect again with a new token. |
 | A transaction is in the wrong category | Click it on the **Transactions** tab and pick the right one (tick "all similar" so it sticks). |
+| Phone says *"Can't reach your PC right now"* | Check the PC is on and awake (not asleep), and that Tailscale shows **Connected** on the iPhone. |
+| Phone access button says Tailscale needs something switched on | Approve the page Tailscale opened (or turn on **HTTPS Certificates** at https://login.tailscale.com/admin/dns), then click **Turn on phone access** again. |
 | No notifications appear | On Follow-ups, click **Send a test**. If nothing shows, check Windows **Settings → System → Notifications**: notifications must be on, **Do not disturb** / Focus off, and "Life Control Center" (or "Windows PowerShell") allowed. Problems are logged in `data\notifier.log`. |
 | Double-clicking the icon does nothing, or an error box appears | Look in `C:\Users\<you>\LifeControlCenter\data\app.log` for details, or double-click `start.bat` in that folder to see the app's messages as it starts. |
 
@@ -299,6 +321,7 @@ LifeControlCenter/
 │       ├── shopping/        ← shopping list (needs/wants) and reading product links
 │       ├── finances/        ← SimpleFIN sync, categories, budgets, cash flow; the finance AI assistant
 │       ├── followups/       ← follow-ups, reminders, notification history and settings
+│       ├── remote/          ← phone access: passcode sign-in, devices, background mode, Tailscale setup
 │       └── assistant/       ← command bar: Claude prompt, JSON schema, apply + undo
 └── frontend/                ← what you see in the browser (plain HTML/CSS/JS, no build step)
     ├── index.html, styles.css

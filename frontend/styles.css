@@ -724,6 +724,33 @@ a.btn { text-decoration: none; color: inherit; }
   .fu-lower, .fu-settings { grid-template-columns: 1fr; }
 }
 
+/* ---------- Phone access ---------- */
+.login-screen { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; background: var(--bg, #070a12); }
+.login-card { width: min(380px, 100%); padding: 28px 24px; display: grid; gap: 12px; text-align: center; }
+.login-card h1 { margin: 0; font: 650 22px var(--font-display); }
+.login-card p { margin: 0; color: var(--text-2); font-size: 14px; }
+.login-icon { width: 64px; height: 64px; border-radius: 16px; margin: 0 auto 4px; }
+.login-card input { text-align: center; font-size: 18px; letter-spacing: .1em; }
+.login-card .btn { justify-content: center; }
+.login-card .error-msg { color: var(--danger); }
+.ph-card h2 { display: flex; align-items: center; gap: 8px; }
+.ph-card h2 svg.i { width: 18px; height: 18px; color: var(--accent); }
+.ph-steps { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 4px; }
+.ph-step { display: flex; gap: 14px; padding: 12px 0; border-top: 1px solid var(--border); }
+.ph-num { width: 28px; height: 28px; flex: none; border-radius: 50%; display: grid; place-items: center; font: 700 13px var(--font-mono);
+  background: var(--accent-soft); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+.ph-step.done .ph-num { background: var(--success-soft); color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, transparent); }
+.ph-body { flex: 1; min-width: 0; }
+.ph-body h3 { margin: 3px 0 6px; font: 600 15px var(--font-display); }
+.ph-body p { margin: 0 0 8px; }
+.ph-body code { overflow-wrap: anywhere; }
+.ph-pass { display: flex; gap: 8px; max-width: 420px; }
+.ph-pass input { flex: 1; }
+.ph-qr { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.ph-qr svg { width: 170px; height: 170px; background: #fff; border-radius: 12px; flex: none; }
+.ph-qr > div { flex: 1; min-width: 200px; }
+.ph-sub { margin: 18px 0 4px; font: 600 11.5px var(--font-mono); text-transform: uppercase; letter-spacing: .14em; color: var(--text-2); }
+
 /* ---------- Notes timeline ---------- */
 .timeline { list-style: none; margin: 0; padding: 0; }
 .timeline li { position: relative; padding: 0 0 16px 22px; }
@@ -758,7 +785,7 @@ dialog::backdrop { background: rgba(3, 5, 12, .6); backdrop-filter: blur(4px); }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field > span { font: 600 10.5px/1 var(--font-mono); text-transform: uppercase; letter-spacing: .12em; color: var(--text-3); }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-input[type=text], input[type=date], input[type=time], input[type=datetime-local], input[type=number], select, textarea {
+input[type=text], input[type=password], input[type=date], input[type=time], input[type=datetime-local], input[type=number], select, textarea {
   width: 100%; padding: 9px 11px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);
   background: var(--surface-2); outline: none; transition: border-color .15s, box-shadow .15s;
 }
@@ -832,4 +859,11 @@ input[type=range] { width: 100%; accent-color: var(--area, var(--accent)); }
   .command { padding-left: 14px; }
   .routine-grid { grid-template-columns: 1fr; }
   .stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Home-screen app on iPhone: keep clear of the notch and the home bar. */
+@media (max-width: 860px) {
+  .topbar { padding-top: max(10px, env(safe-area-inset-top)); }
+  .content { padding-bottom: max(64px, calc(env(safe-area-inset-bottom) + 40px)); }
+  .sidebar { padding-top: max(20px, env(safe-area-inset-top)); padding-bottom: max(20px, env(safe-area-inset-bottom)); }
 }

@@ -8,11 +8,16 @@ console window). It:
   2. checks GitHub for a newer version and installs it (see updater.py),
   3. starts the app's server quietly in the background; the window switches
      to the app as soon as it's ready,
-  4. shuts the server down when you close that window.
+  4. shuts the server down a few minutes after you close that window (the
+     open window checks in every 15 seconds; when that stops, it's closed).
+
+If an older copy of the app is still running (for example from before an
+update), it's stopped first so you always get the current version.
 
 If something goes wrong, details are written to data/app.log.
 (start.bat still works too, and shows the server's messages in a window.)
 """
+import json
 import logging
 import os
 import socket
@@ -33,6 +38,8 @@ LOG = DATA / "app.log"
 SPLASH = ROOT / "frontend" / "splash.html"
 LOCK_PORT = 47819  # held while a launcher is running, so two clicks don't start two apps
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0  # Windows: don't flash a console for helpers
+
+IDLE_LIMIT = int(os.environ.get("LCC_IDLE_LIMIT", 180))  # seconds without a check-in before the app stops
 
 # Set when the launcher restarts itself after updating its own code.
 AFTER_UPDATE = os.environ.get("LCC_AFTER_UPDATE") == "1"
@@ -84,17 +91,42 @@ def take_lock():
         return None
 
 
-def window_is_open(browser: Path) -> bool:
-    """True while any browser process is using the app window's profile."""
-    query = (f"@(Get-CimInstance Win32_Process -Filter \"Name='{browser.name}'\" | "
-             f"Where-Object {{ $_.CommandLine -like '*{PROFILE.name}*' }}).Count")
+def server_info() -> dict | None:
+    """Version and process id of the running app, or None if it's too old to say."""
     try:
-        out = subprocess.run(["powershell", "-NoProfile", "-Command", query],
-                             capture_output=True, text=True, timeout=20, creationflags=NO_WINDOW)
-        return int(out.stdout.strip() or 0) > 0
-    except Exception as e:
-        logging.warning("Couldn't check for the app window (%s); stopping.", e)
-        return False
+        with urllib.request.urlopen(f"{URL}/api/app/info", timeout=2) as resp:
+            return json.loads(resp.read())
+    except Exception:
+        return None
+
+
+def installed_version() -> str | None:
+    try:
+        return json.loads((DATA / "version.json").read_text(encoding="utf-8")).get("sha")
+    except Exception:
+        return None
+
+
+def stop_old_server(info: dict | None) -> None:
+    """Stop an out-of-date copy of the app that's still running."""
+    if info and info.get("pid"):
+        try:
+            os.kill(int(info["pid"]), 15)
+        except Exception as e:
+            logging.warning("Couldn't stop process %s (%s)", info["pid"], e)
+    elif os.name == "nt":
+        # Versions from before this check can't report their process id, so find
+        # the Python program that's using the app's port and stop it.
+        script = (f"Get-NetTCPConnection -LocalPort {PORT} -State Listen -ErrorAction SilentlyContinue | "
+                  "Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { "
+                  "$p = Get-Process -Id $_ -ErrorAction SilentlyContinue; "
+                  "if ($p -and $p.ProcessName -like 'python*') { Stop-Process -Id $_ -Force } }")
+        subprocess.run(["powershell", "-NoProfile", "-Command", script],
+                       capture_output=True, timeout=30, creationflags=NO_WINDOW)
+    for _ in range(40):  # wait up to 10 seconds for it to go away
+        if not server_is_up():
+            return
+        time.sleep(0.25)
 
 
 def start_server():
@@ -122,21 +154,31 @@ def main() -> None:
     logging.info("Launcher starting%s", " (after update)" if AFTER_UPDATE else "")
 
     browser = find_browser()
-    lock = take_lock()
-    for _ in range(20):  # right after an update, the old launcher may still be exiting
-        if lock or not AFTER_UPDATE:
-            break
-        time.sleep(0.25)
-        lock = take_lock()
 
-    if lock is None or server_is_up():
-        # The app is already running (or another click is starting it right now).
-        if server_is_up():
+    if server_is_up():
+        info = server_info()
+        if info is not None and info.get("version") == installed_version():
+            # The current version is already running: just open another window.
             if browser:
                 open_window(browser, URL)
             else:
                 webbrowser.open(URL)
-        return
+            return
+        logging.info("An older copy of the app is still running (%s); stopping it", info)
+        stop_old_server(info)
+        if server_is_up():
+            show_error("An older copy of Life Control Center is still running and couldn't be "
+                       "stopped. Please restart your computer, then open the app again.")
+            return
+
+    lock = take_lock()
+    for _ in range(40):  # an old launcher we just stopped (or one restarting after an update) may still be exiting
+        if lock:
+            break
+        time.sleep(0.25)
+        lock = take_lock()
+    if lock is None:
+        return  # another click is starting the app right now
 
     # 1. Show the window straight away, with a "Starting..." screen.
     if browser and not AFTER_UPDATE:
@@ -174,10 +216,12 @@ def main() -> None:
         thread.join()  # keeps running until you sign out or restart
         return
 
-    # 4. Keep running until the window is closed, then stop the app.
-    time.sleep(5)
-    while window_is_open(browser):
-        time.sleep(3)
+    # 4. Keep running while the window is open. It checks in every 15 seconds
+    #    (at least once a minute when minimized); after IDLE_LIMIT seconds of
+    #    silence the window must be closed, so stop the app.
+    from backend.main import seconds_since_ping
+    while seconds_since_ping() < IDLE_LIMIT:
+        time.sleep(5)
     logging.info("App window closed; stopping the server")
     server.should_exit = True
     thread.join(timeout=10)

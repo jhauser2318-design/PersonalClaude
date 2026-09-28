@@ -85,6 +85,9 @@ async function updateBadge() {
 // ===========================================================================
 
 const EXAMPLES = [
+  "How much did I spend on dining last month?",
+  "Am I on track with my budget this month?",
+  "What subscriptions am I paying for?",
   "Add AirPods Pro to my wants, $249",
   "How much are my needs in total?",
   "What did Sarah say about the budget?",
@@ -121,7 +124,7 @@ function formatReply(text) {
 
 function showResult(result) {
   const box = $("#command-result");
-  const icons = { applied: "✓", answer: "i", clarify: "?", error: "!", email: "@" };
+  const icons = { applied: "✓", answer: "i", clarify: "?", error: "!", email: "@", finance: "$" };
   box.className = `command-result ${result.status}`;
   box.innerHTML = `
     <div class="cr-icon" aria-hidden="true">${icons[result.status] || "i"}</div>
@@ -177,7 +180,7 @@ async function runCommand(text) {
     }
     if (result.status !== "error") input.value = "";
     showResult(result);
-    if (result.status === "applied") state.refresh();
+    if (result.status === "applied" || (result.status === "finance" && result.changes?.length)) state.refresh();
   } catch (err) {
     showResult({ status: "error", reply: err.message });
   } finally {

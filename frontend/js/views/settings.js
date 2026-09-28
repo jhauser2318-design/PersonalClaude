@@ -5,7 +5,7 @@ import { esc, toast } from "../ui.js";
 import { getTheme, setTheme } from "../theme.js";
 
 export async function render(view) {
-  const status = await api.get("/command/status");
+  const [status, version] = await Promise.all([api.get("/command/status"), api.get("/version")]);
   const theme = getTheme();
   view.innerHTML = `
     <div class="page-head"><div><h1>Settings</h1></div></div>
@@ -25,6 +25,14 @@ export async function render(view) {
           <button class="btn danger" id="clear-examples">Clear example data</button>
           <button class="btn" id="load-examples">Load examples again</button>
         </div>
+      </section>
+      <section class="card">
+        <h2>Version & updates</h2>
+        <p>${version.version
+          ? `Version <code>${esc(version.version)}</code>, installed ${esc(new Date(version.updated_at).toLocaleString())}.<br>Latest change: ${esc(version.summary)}`
+          : "Version not recorded yet. It will be after the next automatic update."}</p>
+        <p>Updates install automatically: every time you open the app from its Desktop icon, it checks GitHub for a newer version first.
+           Your goals, tasks and API key are never changed by an update.</p>
       </section>
       <section class="card">
         <h2>Command bar</h2>

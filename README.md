@@ -29,7 +29,7 @@ The command bar uses Claude through Anthropic's API. An **API key** is like a pa
 
 ### 2. Download the app
 
-While logged in to GitHub, click this link:
+Click this link:
 
 ### 👉 [Download Life Control Center (ZIP)](https://github.com/jhauser2318-design/PersonalClaude/archive/refs/heads/main.zip)
 
@@ -59,16 +59,20 @@ After this, you can delete the ZIP and the extracted folder. The app lives in `C
 - Behind the scenes, the window shows the page at http://localhost:8000. (`localhost` means "this computer": the app isn't on the internet, and nobody else can see it.)
 - The window uses Microsoft Edge, which comes with Windows (or Google Chrome if Edge is missing). It keeps its own settings, separate from your normal browser.
 
-### Updating to a newer version later
+### Updates install automatically
 
-The app on your computer is a **copy**. The main version lives on GitHub. When the code on GitHub changes (for example, when Claude builds the next phase for you), your copy **does not change by itself**. To update it:
+Every time you open the app from its Desktop icon, it first checks GitHub for a newer version. While it checks, you'll see a short **"Checking for updates…"** screen.
 
-1. Close the app window.
-2. Download the ZIP again (same link as above), extract it, and double-click `INSTALL.bat`.
+- If there's a new version, it downloads and installs it (usually a few seconds), then opens. A small banner tells you what changed.
+- If you're offline, it skips the check and opens normally.
+- **Your goals, tasks, notes and API key are never touched** by an update. Only the app's code changes.
+- **Settings → Version & updates** shows which version you have.
 
-That's it. **Your goals, tasks, notes and API key are kept**: the installer never touches your `data` folder or your `.env` file. The Desktop icon and the address stay the same.
+So when Claude (or you) changes the code on GitHub, you'll get it the next time you open the app. If the app is open when the change is made, close it and open it again.
 
-> If you change the app's code files directly in `C:\Users\<you>\LifeControlCenter`, the change shows up the next time you open the app, but the next update will overwrite it. To keep changes, make them on GitHub (or ask Claude to).
+> If you change the app's code files directly in `C:\Users\<you>\LifeControlCenter`, the next automatic update will overwrite them. Make changes on GitHub instead (or ask Claude to).
+
+> **Reinstalling:** you can always download the ZIP again and run `INSTALL.bat`. It also keeps your data and key.
 
 <details>
 <summary>Setting it up by hand instead (Windows PowerShell)</summary>
@@ -157,7 +161,8 @@ The first time you start the app, it adds one example goal per life area plus a 
 ```
 LifeControlCenter/
 ├── INSTALL.bat              ← one-time Windows setup (runs scripts/install.ps1)
-├── launcher.pyw             ← what the Desktop icon runs: starts the app in its own window
+├── launcher.pyw             ← what the Desktop icon runs: updates, then starts the app in its own window
+├── updater.py               ← downloads the newest version from GitHub (keeps data/ and .env)
 ├── start.bat / start.sh     ← starts the app with a visible log window (handy for troubleshooting)
 ├── requirements.txt         ← Python packages the app needs
 ├── .env.example             ← template for your settings (copy to .env)

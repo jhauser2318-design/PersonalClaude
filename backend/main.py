@@ -4,6 +4,7 @@ Start it from the project folder with:
     python -m uvicorn backend.main:app --port 8000
 then open http://localhost:8000 in your browser.
 """
+import json
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -38,6 +39,34 @@ for module in MODULES:
 @app.get("/api/areas")
 def list_areas():
     return AREAS
+
+
+def _read_version() -> dict:
+    try:
+        return json.loads(config.VERSION_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+@app.get("/api/version")
+def get_version():
+    """Which version is installed, and whether to show "just updated"."""
+    v = _read_version()
+    return {
+        "version": (v.get("sha") or "")[:7] or None,
+        "summary": v.get("summary"),
+        "updated_at": v.get("updated_at"),
+        "just_updated": bool(v.get("show_notice")),
+    }
+
+
+@app.post("/api/version/seen")
+def version_seen():
+    v = _read_version()
+    if v.get("show_notice"):
+        v["show_notice"] = False
+        config.VERSION_FILE.write_text(json.dumps(v, indent=2), encoding="utf-8")
+    return {"ok": True}
 
 
 # Everything that isn't /api/... is the website itself (HTML, CSS, JS).

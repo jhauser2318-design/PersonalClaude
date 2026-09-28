@@ -195,6 +195,17 @@ async function start() {
   buildNav();
   window.addEventListener("hashchange", route);
   route();
+  announceUpdate();
+}
+
+// After the desktop app installs a new version, say so once.
+async function announceUpdate() {
+  try {
+    const v = await api.get("/version");
+    if (!v.just_updated) return;
+    showResult({ status: "answer", reply: `✨ Updated to the latest version: ${v.summary || v.version}` });
+    await api.post("/version/seen");
+  } catch (e) { /* not important */ }
 }
 
 start();

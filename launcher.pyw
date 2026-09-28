@@ -2,16 +2,20 @@
 
 The Desktop icon runs this file with pythonw.exe (Python without a black
 console window). It:
-  1. starts the app's server quietly in the background,
-  2. opens the app in its own window using Microsoft Edge (or Google Chrome)
-     "app mode": no tabs or address bar, so it looks like a normal program,
-  3. shuts the server down when you close that window.
+  1. opens the app's own window (Microsoft Edge or Google Chrome "app mode":
+     no tabs or address bar, so it looks like a normal program), showing a
+     "Starting..." screen,
+  2. checks GitHub for a newer version and installs it (see updater.py),
+  3. starts the app's server quietly in the background; the window switches
+     to the app as soon as it's ready,
+  4. shuts the server down when you close that window.
 
 If something goes wrong, details are written to data/app.log.
 (start.bat still works too, and shows the server's messages in a window.)
 """
 import logging
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -26,7 +30,12 @@ URL = f"http://localhost:{PORT}"
 DATA = ROOT / "data"
 PROFILE = DATA / "browser-profile"  # the app window's own browser settings
 LOG = DATA / "app.log"
-NO_WINDOW = 0x08000000  # CREATE_NO_WINDOW: don't flash a console when we run helpers
+SPLASH = ROOT / "frontend" / "splash.html"
+LOCK_PORT = 47819  # held while a launcher is running, so two clicks don't start two apps
+NO_WINDOW = 0x08000000 if os.name == "nt" else 0  # Windows: don't flash a console for helpers
+
+# Set when the launcher restarts itself after updating its own code.
+AFTER_UPDATE = os.environ.get("LCC_AFTER_UPDATE") == "1"
 
 
 def show_error(text: str) -> None:
@@ -55,6 +64,24 @@ def find_browser() -> Path | None:
             places += [Path(base) / "Microsoft/Edge/Application/msedge.exe",
                        Path(base) / "Google/Chrome/Application/chrome.exe"]
     return next((p for p in places if p.is_file()), None)
+
+
+def open_window(browser: Path, target: str) -> None:
+    subprocess.Popen([
+        str(browser), f"--app={target}", f"--user-data-dir={PROFILE}",
+        "--no-first-run", "--no-default-browser-check", "--window-size=1280,860",
+    ])
+
+
+def take_lock():
+    """Returns a held socket if no other launcher is running, else None."""
+    lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        lock.bind(("127.0.0.1", LOCK_PORT))
+        return lock
+    except OSError:
+        lock.close()
+        return None
 
 
 def window_is_open(browser: Path) -> bool:
@@ -92,43 +119,63 @@ def main() -> None:
     sys.stdout = sys.stderr = log_file
     logging.basicConfig(stream=log_file, level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
-    logging.info("Launcher starting")
-
-    server = thread = None
-    if not server_is_up():
-        try:
-            server, thread = start_server()
-        except Exception as e:
-            show_error(f"The app couldn't start:\n\n{e}\n\nDetails are in {LOG}")
-            return
-        for _ in range(60):  # wait up to 30 seconds
-            if server_is_up() or not thread.is_alive():
-                break
-            time.sleep(0.5)
-        if not server_is_up():
-            show_error("The app couldn't start. Is another program using port 8000?\n\n"
-                       f"Details are in {LOG}")
-            return
-
-    # Only shut the server down later if this launcher is the one that started it.
-    owns_server = thread is not None and thread.is_alive()
+    logging.info("Launcher starting%s", " (after update)" if AFTER_UPDATE else "")
 
     browser = find_browser()
+    lock = take_lock()
+    for _ in range(20):  # right after an update, the old launcher may still be exiting
+        if lock or not AFTER_UPDATE:
+            break
+        time.sleep(0.25)
+        lock = take_lock()
+
+    if lock is None or server_is_up():
+        # The app is already running (or another click is starting it right now).
+        if server_is_up():
+            if browser:
+                open_window(browser, URL)
+            else:
+                webbrowser.open(URL)
+        return
+
+    # 1. Show the window straight away, with a "Starting..." screen.
+    if browser and not AFTER_UPDATE:
+        open_window(browser, SPLASH.as_uri())
+
+    # 2. Get the newest version from GitHub.
+    if not AFTER_UPDATE:
+        import updater
+        if updater.update():
+            # The launcher itself changed: restart it so the new code runs.
+            logging.info("Launcher updated; restarting it")
+            lock.close()
+            subprocess.Popen([sys.executable, str(ROOT / "launcher.pyw")], cwd=ROOT,
+                             env={**os.environ, "LCC_AFTER_UPDATE": "1"})
+            return
+
+    # 3. Start the app.
+    try:
+        server, thread = start_server()
+    except Exception as e:
+        show_error(f"The app couldn't start:\n\n{e}\n\nDetails are in {LOG}")
+        return
+    for _ in range(60):  # wait up to 30 seconds
+        if server_is_up() or not thread.is_alive():
+            break
+        time.sleep(0.5)
+    if not server_is_up():
+        show_error("The app couldn't start. Is another program using port 8000?\n\n"
+                   f"Details are in {LOG}")
+        return
+
     if browser is None:
         logging.info("No Edge/Chrome found; opening the default browser")
         webbrowser.open(URL)
-        if owns_server:
-            thread.join()  # keeps running until you sign out or restart
+        thread.join()  # keeps running until you sign out or restart
         return
 
-    subprocess.Popen([
-        str(browser), f"--app={URL}", f"--user-data-dir={PROFILE}",
-        "--no-first-run", "--no-default-browser-check", "--window-size=1280,860",
-    ])
-    if not owns_server:
-        return
-
-    time.sleep(8)  # give the window time to appear
+    # 4. Keep running until the window is closed, then stop the app.
+    time.sleep(5)
     while window_is_open(browser):
         time.sleep(3)
     logging.info("App window closed; stopping the server")

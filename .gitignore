@@ -34,6 +34,7 @@ data/*.db-shm
 # The desktop app window's browser settings, and the launcher's log
 data/browser-profile/
 data/app.log
+data/version.json
 
 # Python clutter
 __pycache__/

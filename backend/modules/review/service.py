@@ -1,5 +1,5 @@
 """Weekly review: every Sunday, look back at the week across the whole app
-(tasks, routines, goals, schedule, focus, workouts, money, CPA, people),
+(tasks, routines, goals, schedule, focus, fun, money, CPA, people),
 write down what went well and what to change, and pick next week's top
 priorities (which can become tasks with one click).
 """
@@ -81,8 +81,8 @@ def stats(conn, start: date) -> dict:
     out["focus_minutes"] = _safe(lambda: round(conn.execute(
         "SELECT COALESCE(SUM(minutes), 0) FROM focus_sessions WHERE started_at >= ? AND started_at < ?",
         (s, e_ts)).fetchone()[0]), 0)
-    out["workouts"] = _safe(lambda: [dict(r) for r in conn.execute(
-        "SELECT date, title FROM workouts WHERE date BETWEEN ? AND ? ORDER BY date", (s, e))], [])
+    out["fun"] = _safe(lambda: [dict(r) for r in conn.execute(
+        "SELECT date, title, rating FROM fun_log WHERE date BETWEEN ? AND ? ORDER BY date", (s, e))], [])
     out["people"] = _safe(lambda: [dict(r) for r in conn.execute(
         """SELECT p.name, i.kind, i.date FROM interactions i JOIN people p ON p.id = i.person_id
            WHERE i.date BETWEEN ? AND ? ORDER BY i.date""", (s, e))], [])
@@ -172,8 +172,8 @@ def stats_text(s: dict) -> str:
         lines.append(f"Schedule blocks done: {sch['done']}/{sch['total']}")
     if s["focus_minutes"]:
         lines.append(f"Focus time: {s['focus_minutes']} minutes")
-    if s["workouts"]:
-        lines.append(f"Workouts ({len(s['workouts'])}): " + "; ".join(f"{w['date']} {w['title']}" for w in s["workouts"]))
+    if s["fun"]:
+        lines.append(f"Fun things done ({len(s['fun'])}): " + "; ".join(f"{w['date']} {w['title']}" for w in s["fun"]))
     if s["money"]:
         m = s["money"]
         lines.append(f"Money: income ${m['income']:,.0f}, spending ${m['spending']:,.0f}; top: "

@@ -9,6 +9,7 @@ import * as dashboard from "./views/dashboard.js";
 import * as email from "./views/email.js";
 import * as finances from "./views/finances.js";
 import * as followups from "./views/followups.js";
+import * as fun from "./views/fun.js";
 import * as goals from "./views/goals.js";
 import * as home from "./views/home.js";
 import * as people from "./views/people.js";
@@ -18,7 +19,6 @@ import * as schedule from "./views/schedule.js";
 import * as settings from "./views/settings.js";
 import * as shopping from "./views/shopping.js";
 import * as tasks from "./views/tasks.js";
-import * as workouts from "./views/workouts.js";
 
 export const GROUPS = ["", "Plan", "Life", "Money", "Home & admin"];
 
@@ -31,7 +31,7 @@ export const MODULES = [
   { id: "calendar", label: "Calendar", icon: "calendar", view: calendar, group: "Plan" },
   { id: "review", label: "Weekly review", icon: "review", view: review, group: "Plan" },
   { id: "people", label: "People", icon: "users", view: people, group: "Life" },
-  { id: "workouts", label: "Workouts", icon: "dumbbell", view: workouts, group: "Life" },
+  { id: "fun", label: "Fun", icon: "sparkle", view: fun, group: "Life" },
   { id: "followups", label: "Follow-ups", icon: "bell", view: followups, group: "Life" },
   { id: "email", label: "Email", icon: "mail", view: email, group: "Life" },
   { id: "finances", label: "Finances", icon: "wallet", view: finances, group: "Money" },

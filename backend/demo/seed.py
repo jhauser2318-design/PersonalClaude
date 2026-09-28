@@ -14,7 +14,7 @@ from ..modules.habits import service as habits
 from ..modules.shopping import service as shopping
 from ..modules.cpa import service as cpa
 from ..modules.finances import planning
-from ..modules.fitness import service as fitness
+from ..modules.fun import service as fun
 from ..modules.home import service as home
 from ..modules.people import service as people
 from ..modules.review import service as review
@@ -277,7 +277,7 @@ def _seed_finances(conn, today: date, rnd: random.Random) -> None:
 
 
 def _seed_life(conn, today: date, rnd: random.Random, g: dict) -> None:
-    """Schedule, CPA planner, people, workouts, home & admin, weekly review, bills and savings."""
+    """Schedule, CPA planner, people, fun, home & admin, weekly review, bills and savings."""
     D = lambda n: today + timedelta(days=n)  # noqa: E731
     habit_id = lambda title: conn.execute("SELECT id FROM habits WHERE title = ?", (title,)).fetchone()[0]  # noqa: E731
 
@@ -330,38 +330,26 @@ def _seed_life(conn, today: date, rnd: random.Random, g: dict) -> None:
         for back, kind, note in contacts:
             people.log_contact(conn, p["id"], D(back).isoformat(), kind, note)
 
-    # --- Workouts --------------------------------------------------------------------
-    bench, squat = 155.0, 205.0
-    gym_logs = [r[0] for r in conn.execute("SELECT date FROM habit_logs WHERE habit_id = ? ORDER BY date",
-                                            (habit_id("Go to the gym"),))]
-    for i, day in enumerate(gym_logs):
-        if i % 3 == 0:
-            w = {"date": day, "kind": "cardio", "title": "Easy run", "minutes": rnd.choice([30, 35, 40]),
-                 "distance": rnd.choice([3.1, 3.5, 4.0]), "sets": []}
-        elif i % 3 == 1:
-            bench += rnd.choice([0, 2.5, 5])
-            w = {"date": day, "kind": "strength", "title": "Push day", "sets": [
-                {"exercise": "Bench press", "sets": 3, "reps": 5, "weight": bench},
-                {"exercise": "Overhead press", "sets": 3, "reps": 8, "weight": 85},
-                {"exercise": "Dips", "sets": 3, "reps": 10, "weight": 0}]}
-        else:
-            squat += rnd.choice([0, 5])
-            w = {"date": day, "kind": "strength", "title": "Legs", "sets": [
-                {"exercise": "Squat", "sets": 3, "reps": 5, "weight": squat},
-                {"exercise": "Romanian deadlift", "sets": 3, "reps": 8, "weight": 135}]}
-        fitness.save_workout(conn, w, log_routine=False)
-    fitness.set_gym_habit(conn, habit_id("Go to the gym"))
-    for back in range(13, -1, -1):  # an Apple Watch's daily numbers
-        day = D(-back).isoformat()
-        conn.execute("INSERT INTO health_daily (date, steps, active_kcal, exercise_min, resting_hr, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                     (day, rnd.randint(5200, 12800) if back else 6120, rnd.randint(380, 760) if back else 412,
-                      rnd.randint(18, 70) if back else 34, rnd.randint(55, 61), _stamp(D(-back), 21)))
-    set_setting(conn, "health_last_import", datetime.now().isoformat(timespec="seconds"))
-    conn.execute("UPDATE workouts SET source = 'apple', calories = minutes * 11, notes = 'from Apple Health' WHERE kind = 'cardio'")
-    weight = 184.0
-    for back in range(84, -1, -3):
-        weight += rnd.uniform(-0.8, 0.5)
-        fitness.log_weight(conn, round(weight, 1), D(-back).isoformat())
+    # --- Fun ---------------------------------------------------------------------------
+    for back, title, cat, rating, who, place, cost, notes in [
+        (-1, "Trivia night", "friends", 4, "Sam, Jordan", "The Owl", 32, "Came 2nd, lost on the music round"),
+        (-3, "Sunset kayak on the river", "outdoors", 5, "Sam", "Chicago River", 45, ""),
+        (-6, "Cubs game", "sports", 4, "Dad", "Wrigley Field", 78, ""),
+        (-9, "Movie night: Dune", "shows", 3, "", "Home", None, ""),
+        (-12, "Ramen crawl", "food", 5, "Jake, Priya", "West Loop", 54, "Best: Ramen Takeya"),
+        (-16, "Board games", "games", 4, "Sam, Jordan", "Home", None, "Wingspan"),
+        (-21, "Farmers market + picnic", "outdoors", 4, "Mom", "Green City Market", 26, ""),
+        (-27, "Jazz at the Green Mill", "shows", 5, "Jake", "Green Mill", 20, ""),
+        (-34, "Pottery class", "creative", 3, "", "Lillstreet", 65, "Wobbly bowl, great time"),
+        (-41, "Weekend in Milwaukee", "travel", 5, "Sam, Jordan", "Milwaukee", 240, ""),
+        (-55, "Lazy Sunday reading in the park", "relax", 4, "", "Lincoln Park", None, ""),
+        (-70, "Axe throwing", "friends", 4, "Priya's team", "Bad Axe", 38, ""),
+    ]:
+        fun.add_entry(conn, {"date": D(back).isoformat(), "title": title, "category": cat, "rating": rating,
+                             "with_whom": who, "place": place, "cost": cost, "notes": notes})
+    for title, cat in [("Chicago food tour", "food"), ("Try indoor climbing", "sports"), ("Architecture boat tour", "outdoors"),
+                       ("Comedy show at Second City", "shows"), ("Weekend in Door County", "travel")]:
+        fun.add_idea(conn, title, cat)
 
     # --- Home & admin ----------------------------------------------------------------
     for name, cat, n, unit, last, notes in [

@@ -57,9 +57,9 @@ def set_model(body: ModelIn):
 
 
 def extra_context(conn) -> dict:
-    """Schedule, people, CPA, workouts and home for the AI bar (each skipped if it fails)."""
+    """Schedule, people, CPA, fun and home for the AI bar (each skipped if it fails)."""
     from ..cpa import service as cpa
-    from ..fitness import service as fitness
+    from ..fun import service as fun
     from ..home import service as home
     from ..people import service as people
     from ..schedule import service as schedule
@@ -69,7 +69,7 @@ def extra_context(conn) -> dict:
         "schedule": lambda: [b for i in range(3) for b in schedule.list_blocks(conn, (today + timedelta(days=i)).isoformat())],
         "people": lambda: people.context_lines(conn),
         "cpa": lambda: cpa.context_line(conn),
-        "workouts": lambda: fitness.context_line(conn),
+        "fun": lambda: fun.context_line(conn),
         "home": lambda: home.context_line(conn),
     }
     for key, fn in parts.items():

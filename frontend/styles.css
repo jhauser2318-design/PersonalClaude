@@ -974,7 +974,7 @@ input[type=range] { width: 100%; accent-color: var(--area, var(--accent)); }
 }
 
 /* ==========================================================================
-   Schedule, focus timer, CPA, people, workouts, meals, home, review,
+   Schedule, focus timer, CPA, people, fun, home, review,
    bills & savings
    ========================================================================== */
 .nav-link.nav-sub { padding-left: 34px; font-size: 13px; }
@@ -1096,12 +1096,6 @@ input[type=range] { width: 100%; accent-color: var(--area, var(--accent)); }
 .ct-form > * { flex: 1 1 120px; }
 .ct-form > .btn { flex: 0 0 auto; }
 
-/* Workouts */
-.fit-chart { width: 100%; height: auto; display: block; }
-.fit-row { cursor: pointer; }
-.fit-pr { font: 650 18px var(--font-mono); }
-.fit-pr small { font-size: 11px; color: var(--text-3); }
-.set-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px 64px 76px 30px; gap: 6px; margin-bottom: 6px; align-items: center; }
 
 
 /* Home & admin */
@@ -1160,7 +1154,6 @@ input[type=range] { width: 100%; accent-color: var(--area, var(--accent)); }
   .bc-bill { justify-content: center; }
   .focus-panel { right: 12px; left: 12px; width: auto; }
   .plan-row .ev-time { min-width: 0; }
-  .set-row { grid-template-columns: minmax(0, 1fr) 48px 48px 60px 30px; }
 }
 
 /* Schedule: drag & drop */
@@ -1201,14 +1194,25 @@ input[type=range] { width: 100%; accent-color: var(--area, var(--accent)); }
   .preset-row select { grid-column: 1 / 3; }
 }
 
-/* Workouts: Apple Health */
-.pill.apple { background: var(--success-soft); color: var(--success); }
-.hk-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
-.hk-stat b { font: 650 22px var(--font-mono); display: inline-block; margin-top: 6px; }
-.hk-stat small { font-size: 12px; color: var(--text-3); }
-.hk-bars { display: flex; align-items: flex-end; gap: 4px; height: 60px; }
-.hk-bars span { flex: 1; background: var(--series-1); border-radius: 3px 3px 0 0; min-height: 3px; }
-.hk-url { display: flex; gap: 8px; }
-.hk-url input { font: 12px var(--font-mono); }
-.hk-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; line-height: 1.5; }
-@media (max-width: 700px) { .hk-stats { grid-template-columns: 1fr 1fr; } }
+
+/* Fun */
+.fun-cols { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+.fun-side { display: flex; flex-direction: column; gap: 14px; }
+.fun-row { cursor: pointer; }
+.fun-emoji { font-size: 20px; line-height: 1; flex: none; width: 26px; text-align: center; }
+.fun-stars { color: var(--warning); font-size: 12px; letter-spacing: 1px; white-space: nowrap; }
+.fun-stars i { font-style: normal; color: var(--surface-3); }
+.fun-side .ct-form { margin-bottom: 8px; }
+.fun-bars { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.fun-bars li { display: grid; grid-template-columns: 150px 1fr 24px; gap: 8px; align-items: center; font-size: 13px; }
+.fun-bars i { height: 8px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.fun-bars b { display: block; height: 100%; background: var(--series-1); border-radius: 99px; }
+.fun-bars em { font: 600 12px var(--font-mono); font-style: normal; text-align: right; }
+.fun-months { display: flex; gap: 4px; height: 50px; align-items: flex-end; }
+.fun-months span { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.fun-months b { width: 100%; background: var(--series-1); border-radius: 3px 3px 0 0; }
+.star-input { display: flex; gap: 4px; }
+.star-input button { border: 0; background: none; font-size: 28px; line-height: 1; color: var(--surface-3); cursor: pointer; padding: 0 2px; }
+.star-input button.on { color: var(--warning); text-shadow: 0 0 10px rgba(251, 191, 36, .4); }
+@media (max-width: 1080px) { .fun-cols { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .fun-bars li { grid-template-columns: 120px 1fr 24px; } }

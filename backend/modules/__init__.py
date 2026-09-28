@@ -4,8 +4,8 @@ Each module is a folder with a `router` (its API endpoints) and an optional
 `on_startup(conn)` function. To add a future module (Calendar, Finances,
 Email...), create its folder and add it to MODULES below.
 """
-from . import (assistant, calendar, cpa, email, finances, fitness, followups, goals, habits, home, people,
+from . import (assistant, calendar, cpa, email, finances, followups, fun, goals, habits, home, people,
                remote, review, schedule, shopping)
 
-MODULES = [goals, habits, calendar, email, shopping, finances, followups, schedule, cpa, people, fitness,
+MODULES = [goals, habits, calendar, email, shopping, finances, followups, schedule, cpa, people, fun,
            home, review, remote, assistant]

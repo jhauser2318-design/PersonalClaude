@@ -22,6 +22,8 @@ export const MODULES = [
     blurb: "Surface emails that need a reply and turn them into tasks with one sentence." },
   { id: "followups", label: "Follow-ups", icon: "bell", comingSoon: true,
     blurb: "Reminders that nudge you about things you promised to do or are waiting on." },
+  { id: "shopping", label: "Shopping list", icon: "cart", comingSoon: true,
+    blurb: "Keep a running shopping list, grouped by store or aisle, and add items just by typing “add milk and eggs to my shopping list”." },
 ];
 
 // Pages that aren't in the main list but still have a web address.

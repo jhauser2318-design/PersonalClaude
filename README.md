@@ -8,10 +8,11 @@ A personal dashboard that runs on your own computer and opens in your web browse
 - **Goals** with a status, a progress %, an optional target date, and a timestamped history of updates.
 - **Tasks**: small action steps with a priority and an optional due date. A task can belong to a goal.
 - **Routines**: recurring tasks such as the gym, skincare or CPA study. Each one runs every day, on chosen days, or N times a week, with an optional daily target (e.g. 2 hours). The app tracks streaks, best streaks, 30-day completion and a 12-week history grid.
-- **Dashboard**: a "command center" with a progress ring for each area, today's routines, what's due today and this week, overdue items, and an activity feed.
+- **Calendar**: your **Google Calendar** inside the app. A week view of your events next to the tasks due each day; add, edit or delete events, and changes show up on your phone.
+- **Dashboard**: a "command center" with a progress ring for each area, today's schedule, today's routines, what's due today and this week, overdue items, and an activity feed.
 - **Live command bar**: type normal sentences and Claude (Anthropic's AI) makes the changes for you. Every change can be undone.
 
-The sidebar already has spots for **Calendar, Finances, Email, Follow-ups and Shopping list**. They say "Coming soon" and will be built in later phases.
+The sidebar already has spots for **Finances, Email, Follow-ups and Shopping list**. They say "Coming soon" and will be built in later phases.
 
 ---
 
@@ -121,6 +122,11 @@ The bar at the top is always visible. Press **/** anywhere to jump to it. Type a
 | `I did my skincare yesterday too` | Logs the routine for yesterday |
 | `Set up a routine to do FAR practice questions Mon, Wed and Fri` | Creates a new routine on those days |
 | `Pause the gym routine` | Pauses it (streaks aren't counted while paused) |
+| `Schedule CPA study tomorrow 7–9pm at the library` | Adds an event to your Google Calendar |
+| `Move my dentist appointment to Thursday at 3pm` | Moves the event (it keeps its length) |
+| `Cancel the team standup on Friday` | Removes that event from your calendar |
+| `When am I free this week for a 2-hour study block?` | Lists free slots from your calendar (no changes made) |
+| `Block Saturday morning for FAR practice and log 1 hour of CPA study` | Does both in one go |
 
 After each command you'll see a short confirmation of exactly what changed, with an **Undo** button.
 If Claude isn't sure what you mean (for example, two goals could match), it **asks you a question instead of guessing**. Type your answer in the bar and it will remember what you were talking about.
@@ -130,8 +136,33 @@ If Claude isn't sure what you mean (for example, two goals could match), it **as
 - **Goals** page: **New goal**, or click any goal card to open it. There you can drag the progress slider, add notes, add or tick off its tasks, **Edit**, or **Delete**.
 - **Tasks** page: tick a checkbox to complete a task, or click a task to edit it. The pencil and bin icons edit and delete. Today's routines are listed at the top.
 - **Routines** page: click the big circle to check a routine off for today (click again to undo). Routines with a daily target have a box to log amounts (e.g. 1.5 hours now, 1 more hour later). The ⏸ button pauses a routine and the pencil edits or deletes it. The grid shows the last 12 weeks: bright = done, faded = partly done, red = missed.
+- **Calendar** page: a week at a time (‹ Today › to move between weeks). Click an event to edit or delete it, **+** on a day to add one, or **New event**. Tasks due that day are listed under the events.
 - **Life areas** in the sidebar (Work, Health, …) show one area's progress, goals and tasks on a single page.
 - **Settings**: switch between light, dark and system themes, and manage the example data.
+
+### Connecting Google Calendar (one time, about 10 minutes)
+
+Google requires every app that uses Google Calendar to be registered. Because this app runs only on your computer, you register it in **your own** free Google Cloud account. The **Calendar** page in the app walks you through the same steps.
+
+1. Go to **https://console.cloud.google.com** and sign in with the Google account whose calendar you want (e.g. jhauser2318@gmail.com). Accept the terms if asked.
+2. At the top, click the project picker → **New project**. Name it `Life Control Center` → **Create**, then make sure it's selected.
+3. In the search bar, type **Google Calendar API**, open it, and click **Enable**.
+4. Open **Google Auth Platform** (in older versions it's **APIs & Services → OAuth consent screen**) → **Get started**:
+   - App name: `Life Control Center`; user support email: your email.
+   - Audience: **External**.
+   - Contact email: your email. Agree and **Create**.
+5. Go to **Audience** and click **Publish app** → **Confirm**. (If you leave it in "Testing", Google disconnects the app every 7 days. Publishing doesn't make anything public: only people with your client file could even try to use it.)
+6. Go to **Clients** (or **Credentials → Create credentials → OAuth client ID**) → **Create client**:
+   - Application type: **Web application**. Name: `Life Control Center`.
+   - Under **Authorized redirect URIs**, click **Add URI** and paste exactly:
+     `http://localhost:8000/api/calendar/oauth/callback`
+   - Click **Create**, then **Download JSON** (the file is named like `client_secret_….json`).
+7. In the app, open **Calendar**, click **Choose File** in step 2 and pick that JSON file.
+8. Click **Connect Google Calendar**, choose your Google account, and allow access.
+   - Google may say **"Google hasn't verified this app"**. That's expected for a personal app: click **Advanced → Go to Life Control Center (unsafe)**, then **Continue**.
+9. You're sent back to the Calendar page with your events showing.
+
+The app asks Google only for permission to see and edit your **calendar events**: not your email, contacts or files. To stop it, click **Disconnect Google Calendar** at the bottom of the Calendar page (or remove access at https://myaccount.google.com/permissions).
 
 ### Example data
 
@@ -144,7 +175,8 @@ The first time you start the app, it adds one example goal per life area plus a 
 - Everything is saved in one file on your computer: **`C:\Users\<you>\LifeControlCenter\data\life.db`** (a SQLite database).
   **To back it up**, stop the app and copy that file somewhere safe.
 - `data/*.db` is in `.gitignore`, so your personal data won't be uploaded to GitHub either.
-- When you use the **command bar**, the backend sends Anthropic your sentence plus a short list of your goals and tasks (titles, areas, dates, progress), so Claude can work out what you mean. Clicking around the app doesn't send anything anywhere.
+- When you use the **command bar**, the backend sends Anthropic your sentence plus a short list of your goals, tasks, routines and (if connected) calendar events for the next two weeks (titles, dates, locations), so Claude can work out what you mean. Clicking around the app doesn't send anything to Anthropic.
+- **Google Calendar**: your Google client file and access token are saved in `data\google_client.json` and `data\google_token.json` on your computer, never uploaded anywhere. Calendar changes go straight from your computer to Google.
 - You can check your API usage and spending at https://console.anthropic.com.
 
 ---
@@ -160,6 +192,9 @@ The first time you start the app, it adds one example goal per life area plus a 
 | `address already in use` / port 8000 busy | Another program is using port 8000. Change `8000` to `8001` (in two places) in `start.bat`, then open http://localhost:8001. |
 | The page says it can't reach the backend, or http://localhost:8000 won't load | The app isn't running. Double-click the Desktop icon. |
 | Some pages say *"Something went wrong loading this page: Not Found"* | An older copy of the app was still running in the background. Restart your computer, then open the app from the Desktop icon. (Newer versions detect and replace an old running copy automatically.) |
+| Calendar says *"redirect_uri_mismatch"* when connecting | In Google Cloud → Clients → your client, the redirect URI must be exactly `http://localhost:8000/api/calendar/oauth/callback`. Fix it, save, download the JSON again and upload it on the Calendar page. |
+| Calendar says *"access_denied"* / *"app is being tested"* | Publish the app (step 5 above), or add your email under **Audience → Test users**. |
+| Calendar keeps asking to reconnect every week | The app is still in "Testing" in Google Cloud. Publish it (step 5 above) and connect once more. |
 | Double-clicking the icon does nothing, or an error box appears | Look in `C:\Users\<you>\LifeControlCenter\data\app.log` for details, or double-click `start.bat` in that folder to see the app's messages as it starts. |
 
 ---
@@ -183,6 +218,8 @@ LifeControlCenter/
 │   └── modules/
 │       ├── __init__.py      ← the list of backend modules
 │       ├── goals/           ← Phase 1: goals, tasks, notes, dashboard, examples
+│       ├── habits/          ← routines: schedules, logs, streaks
+│       ├── calendar/        ← Google Calendar: sign-in (OAuth) and events
 │       └── assistant/       ← command bar: Claude prompt, JSON schema, apply + undo
 └── frontend/                ← what you see in the browser (plain HTML/CSS/JS, no build step)
     ├── index.html, styles.css
@@ -193,9 +230,9 @@ LifeControlCenter/
         └── views/           ← one file per page
 ```
 
-**Adding a new module later (e.g. Calendar):**
-1. Backend: create `backend/modules/calendar/` with a `router` (its API endpoints) and optional `on_startup`, then add it to the `MODULES` list in `backend/modules/__init__.py`.
-2. Frontend: add `frontend/js/views/calendar.js` with a `render(view)` function, then in `frontend/js/modules.js` import it and replace `comingSoon: true` with `view: calendar`.
+**Adding a new module later (e.g. Finances):**
+1. Backend: create `backend/modules/finances/` with a `router` (its API endpoints) and optional `on_startup`, then add it to the `MODULES` list in `backend/modules/__init__.py`. (`backend/modules/calendar/` is a good example.)
+2. Frontend: add `frontend/js/views/finances.js` with a `render(view)` function, then in `frontend/js/modules.js` import it and replace `comingSoon: true` with `view: finances`.
 3. To let the command bar control it: add new action types to the schema and prompt in `backend/modules/assistant/claude_client.py`, and handle them in `actions.py`.
 
 **How the command bar works under the hood:** the backend sends Claude your sentence, today's date and a compact list of your goals and tasks with their ID numbers. The request uses *structured outputs*, which forces Claude's reply to be JSON matching a fixed schema (`intent`, `reply`, `actions`). The backend checks every action and applies them all together in one step: if any action is invalid, nothing changes. Before changing anything it saves the old version of each item, which is what **Undo** puts back.

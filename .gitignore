@@ -36,6 +36,9 @@ data/browser-profile/
 data/app.log
 data/version.json
 
+# Google Calendar connection (your OAuth client and access token)
+data/google_*.json
+
 # Python clutter
 __pycache__/
 *.pyc

@@ -17,7 +17,8 @@ from ...areas import AREAS
 
 AREA_ENUM = [a["id"] for a in AREAS]
 ACTION_TYPES = ["create_goal", "update_goal", "add_note", "create_task", "update_task", "complete_task",
-                "create_habit", "update_habit", "log_habit"]
+                "create_habit", "update_habit", "log_habit",
+                "create_event", "update_event", "delete_event"]
 
 
 # Every action field is always present, with a "blank" value when it doesn't
@@ -30,6 +31,7 @@ BLANKS = {
     "target_date": "", "status": "", "progress": -1, "note": "", "due_date": "", "priority": "",
     "done": "", "frequency": "", "days": [], "times_per_week": 0, "target_amount": 0, "unit": "",
     "amount": 0, "date": "", "active": "",
+    "event_id": "", "start": "", "end": "", "location": "",
 }
 YES_NO = {"yes": True, "no": False}
 
@@ -59,6 +61,10 @@ ACTION_SCHEMA = {
         "amount": {"type": "number"},
         "date": {"type": "string"},
         "active": {"type": "string", "enum": ["yes", "no", ""]},
+        "event_id": {"type": "string"},
+        "start": {"type": "string"},
+        "end": {"type": "string"},
+        "location": {"type": "string"},
     },
     "additionalProperties": False,
 }
@@ -90,7 +96,7 @@ RESPONSE_SCHEMA = {
     "additionalProperties": False,
 }
 
-SYSTEM_PROMPT = """You are the command bar of "Life Control Center", a personal dashboard where the user tracks goals and tasks across four life areas: work, health, social, education.
+SYSTEM_PROMPT = """You are the command bar of "Life Control Center", a personal dashboard where the user tracks goals, tasks and routines across four life areas (work, health, social, education), next to their Google Calendar.
 
 The user types short natural sentences. Work out what they mean and respond with JSON in one of three forms:
 
@@ -108,15 +114,20 @@ Actions. Every field must be present in every action. For fields that don't appl
 - create_habit: a ROUTINE, i.e. a recurring task the user wants to do regularly (gym, skincare, studying, meditation...). title, area (required); frequency: "daily", "weekdays" (then days: list of weekday numbers, 0=Monday ... 6=Sunday) or "times_per_week" (then times_per_week: 1-7); optional target_amount + unit for a daily amount (e.g. 2 "hours", 10000 "steps"); optional goal_id to link it to a goal.
 - update_habit: habit_id (required) plus only the fields that change (title, area, goal_id, frequency, days, times_per_week, target_amount, unit). To pause a routine set active "no"; to resume it set active "yes".
 - log_habit: habit_id (required). Records that the user did a routine. date: "" means today; set it (YYYY-MM-DD) for "yesterday" etc. amount: how much they did if the routine has a unit (e.g. "studied CPA for 3 hours" -> 3); 0 means "fully done". note: optional short detail.
+- create_event: a Google Calendar event, i.e. something happening at a specific time or on a specific day ("dentist Thursday 3pm", "block 7-9pm tomorrow for CPA study", "Mom's birthday dinner Saturday"). title and start (required); end; location; description (optional notes). start/end are "YYYY-MM-DDTHH:MM" (24-hour clock, the calendar's own time zone) for timed events, or "YYYY-MM-DD" for all-day events (end = last day, inclusive). If no end or duration is given, leave end "" (it defaults to 1 hour).
+- update_event: event_id (required, from the CALENDAR list) plus only what changes (title, start, end, location, description). When only the start moves, leave end "" and the event keeps its length.
+- delete_event: event_id (required). Only when the user clearly asks to cancel or remove that specific event.
 
 Rules:
+- Events vs tasks vs routines: a thing with a time slot or that happens on a date is a calendar event; a to-do with a deadline is a task; a repeated habit is a routine. "Schedule", "book", "block time", "put on my calendar", "meeting/appointment at <time>" mean an event. If the calendar isn't connected, don't create events: reply (intent "answer") that Google Calendar needs to be connected on the Calendar page first, and offer to add it as a task instead.
+- For "when am I free" questions, read the CALENDAR list and answer with concrete free slots (intent "answer").
 - Routines vs tasks: something repeated on a schedule ("every day", "3 times a week", "each morning") is a routine (create_habit). A one-off action is a task. When the user says they did something that matches a routine ("went to the gym", "did my skincare", "studied for the CPA 2 hours"), use log_habit, not a task or a goal note. If that routine is also linked to a goal, you may additionally add a short goal note only when the user describes real progress on the goal.
 - Use the IDs from the data provided. Match loosely by meaning ("my fitness goal" can match "Run a 5K" in Health; "the Spanish lesson task" matches a task mentioning Spanish lesson). If exactly one item is a clear match, use it.
 - When the user reports progress on a goal, add a note describing what they did (in their words, tidied up). Only change "progress" if they give a number or the update clearly moves a measurable goal forward; otherwise leave it -1. If the goal's status is not_started, also set status to in_progress with an update_goal action.
 - Dates must be YYYY-MM-DD. Resolve relative dates from today's date given below: "Friday" means the next upcoming Friday (today if today is Friday), "next week" means next Monday, "by March" means the last day of the next upcoming March, "end of month" the last day of the current month.
 - Pick the area from context: gym/running/diet/sleep/doctor = health; job/colleagues/boss/budget/clients = work; friends/family/parties = social; courses/languages/reading/studying = education. If the user names an area, use it. If the area truly can't be inferred, ask.
 - Titles should be short and start with a capital letter, without the date in them ("Email Sarah about the budget").
-- Never delete anything. If the user asks to delete, reply that deleting is done by clicking the item, with intent "answer".
+- Never delete goals, tasks or routines. If the user asks to delete one, reply that deleting is done by clicking the item, with intent "answer". (Calendar events may be deleted with delete_event.)
 - The reply is shown in a small banner: plain text, no markdown headings, no bold."""
 
 
@@ -124,7 +135,8 @@ class AssistantError(Exception):
     """A problem talking to Claude, with a message safe to show the user."""
 
 
-def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | None = None) -> str:
+def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | None = None,
+                  calendar: dict | None = None) -> str:
     today = date.today()
     lines = [f"Today is {today.strftime('%A')}, {today.isoformat()}.", "", "GOALS (id | area | title | status | progress | target date | last update):"]
     if not goals:
@@ -159,6 +171,20 @@ def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | Non
             f"#{h['id']} | {h['area']} | {h['title']} | {h['schedule_text']} | {today_s} | "
             f"{h['streak']} | {'active' if h['active'] else 'paused'}"
         )
+    lines += [""]
+    calendar = calendar or {}
+    if calendar.get("error"):
+        lines.append(f"CALENDAR: unavailable right now ({calendar['error']})")
+    elif not calendar.get("connected"):
+        lines.append("CALENDAR: Google Calendar is not connected.")
+    else:
+        lines.append(f"CALENDAR (Google, time zone {calendar.get('time_zone') or 'unknown'}; "
+                     "events from yesterday to 2 weeks ahead; id | start | end | title | location):")
+        if not calendar.get("events"):
+            lines.append("(no events)")
+        for e in calendar.get("events", []):
+            lines.append(f"{e['id']} | {e['start']} | {e['end']}{' (all day)' if e['all_day'] else ''} | "
+                         f"{e['title']} | {e['location'] or '-'}")
     return "\n".join(lines)
 
 

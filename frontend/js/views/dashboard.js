@@ -3,6 +3,7 @@
 import { api } from "../api.js";
 import { bindGoals, bindTasks, goalGrid, taskList } from "../components.js";
 import { bindRoutines, routineList } from "../routines.js";
+import { eventTime, openEventEditor } from "./calendar.js";
 import { areaStyle, areaTag, esc, fmtDateTime, ring } from "../ui.js";
 
 function greeting() {
@@ -11,7 +12,10 @@ function greeting() {
 }
 
 export async function render(view) {
-  const [d, habits] = await Promise.all([api.get("/dashboard"), api.get("/habits")]);
+  const [d, habits, cal] = await Promise.all([
+    api.get("/dashboard"), api.get("/habits"),
+    api.get("/calendar/events?days=1").catch(() => ({ connected: false, events: [], failed: true })),
+  ]);
   const now = new Date();
   const stamp = now.toLocaleDateString(undefined, { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
   const overdueCount = d.overdue_tasks.length + d.overdue_goals.length;
@@ -27,6 +31,7 @@ export async function render(view) {
         <span class="status-chip"><span class="dot" style="--c:var(--accent-2)"></span><b>${routinesLeft}</b> routine${routinesLeft === 1 ? "" : "s"} left today</span>
         <span class="status-chip"><span class="dot" style="--c:var(--warning)"></span><b>${d.due_today.length}</b> task${d.due_today.length === 1 ? "" : "s"} due today</span>
         ${overdueCount ? `<span class="status-chip"><span class="dot" style="--c:var(--danger)"></span><b>${overdueCount}</b> overdue</span>` : ""}
+        ${cal.connected ? `<span class="status-chip"><span class="dot" style="--c:#c084fc"></span><b>${cal.events.length}</b> event${cal.events.length === 1 ? "" : "s"} today</span>` : ""}
         <span class="status-chip"><span class="dot" style="--c:var(--success)"></span><b>${d.due_this_week.length}</b> this week</span>
       </div>
     </div></div>
@@ -50,6 +55,17 @@ export async function render(view) {
             ${d.overdue_tasks.length ? taskList(d.overdue_tasks) : ""}
             ${d.overdue_goals.length ? `<div style="margin-top:12px">${goalGrid(d.overdue_goals)}</div>` : ""}
           </div>` : ""}
+        <h2 class="section">Today's schedule <span class="count">${cal.events.length}</span><span class="line"></span><a href="#/calendar">Calendar →</a></h2>
+        <div id="dash-schedule">${!cal.connected
+          ? `<div class="card empty">${cal.failed ? "Couldn't reach Google Calendar right now." : `Google Calendar isn't connected. <a href="#/calendar">Connect it →</a>`}</div>`
+          : cal.events.length
+            ? `<div class="card schedule">${cal.events.map((e) => `
+                <button class="event ${e.all_day ? "all-day" : ""}" data-event-id="${esc(e.id)}">
+                  <span class="ev-time">${esc(eventTime(e))}</span>
+                  <span class="ev-title">${esc(e.title)}</span>
+                  ${e.location ? `<span class="ev-loc">${esc(e.location)}</span>` : ""}
+                </button>`).join("")}</div>`
+            : `<div class="card empty">Nothing on the calendar today.</div>`}</div>
         <h2 class="section">Today's routines <span class="count">${todays.length - routinesLeft}/${todays.length}</span><span class="line"></span><a href="#/routines">All →</a></h2>
         <div id="dash-routines">${routineList(todays, "No routines due today. Add one on the Routines page.")}</div>
         <h2 class="section">Due today <span class="count">${d.due_today.length}</span><span class="line"></span></h2>
@@ -81,6 +97,11 @@ export async function render(view) {
     if (el) bindTasks(el, [...allTasks, ...d.recently_done]);
   }
   bindRoutines(view.querySelector("#dash-routines"), todays);
+  const events = Object.fromEntries(cal.events.map((e) => [e.id, e]));
+  view.querySelector("#dash-schedule").addEventListener("click", (e) => {
+    const ev = e.target.closest("[data-event-id]");
+    if (ev) openEventEditor(events[ev.dataset.eventId], () => render(view));
+  });
   const overdue = view.querySelector("#dash-overdue");
   if (overdue) bindGoals(overdue);
 }

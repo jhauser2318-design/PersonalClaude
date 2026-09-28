@@ -3,6 +3,7 @@
 // To add a future module (e.g. Calendar): write its page in js/views/,
 // import it here, remove `comingSoon: true` and set `view`. That's it.
 import * as area from "./views/area.js";
+import * as calendar from "./views/calendar.js";
 import * as dashboard from "./views/dashboard.js";
 import * as goals from "./views/goals.js";
 import * as routines from "./views/routines.js";
@@ -14,10 +15,9 @@ export const MODULES = [
   { id: "goals", label: "Goals", icon: "target", view: goals },
   { id: "tasks", label: "Tasks", icon: "check", view: tasks },
   { id: "routines", label: "Routines", icon: "repeat", view: routines },
+  { id: "calendar", label: "Calendar", icon: "calendar", view: calendar },
 
   // Future phases (shown as "Coming soon").
-  { id: "calendar", label: "Calendar", icon: "calendar", comingSoon: true,
-    blurb: "See your schedule next to your goals, and turn tasks with due dates into calendar events." },
   { id: "finances", label: "Finances", icon: "wallet", comingSoon: true,
     blurb: "Track spending, budgets and savings goals alongside the rest of your life." },
   { id: "email", label: "Email", icon: "mail", comingSoon: true,

@@ -5,6 +5,11 @@ from pydantic import BaseModel
 
 from ... import config
 from ...database import get_db
+from datetime import date, timedelta
+
+from ..calendar import google as calendar_google
+from ..calendar import service as calendar
+from ..calendar.google import CalendarError
 from ..goals import service
 from ..habits import service as habits
 from ..goals.service import ValidationError
@@ -35,9 +40,18 @@ async def run_command(body: CommandIn):
     if not text:
         raise HTTPException(status_code=400, detail="Type something first")
 
+    cal = {"connected": calendar_google.is_connected()}
+    if cal["connected"]:
+        try:
+            cal["events"] = await run_in_threadpool(
+                calendar.list_events, date.today() - timedelta(days=1), 16)
+            cal["time_zone"] = calendar._time_zone
+        except CalendarError as e:
+            cal["error"] = str(e)
+
     with get_db() as conn:
         context = build_context(service.list_goals(conn), service.list_tasks(conn),
-                                habits.list_habits(conn))
+                                habits.list_habits(conn), cal)
 
     try:
         # Calling Claude takes a few seconds; run it off the main thread so the
@@ -54,11 +68,16 @@ async def run_command(body: CommandIn):
         return {"status": "clarify" if intent == "clarify" else "answer",
                 "reply": reply, "changes": [], "log_id": None}
 
-    try:
+    def apply():
         with get_db() as conn:  # all-or-nothing: any error rolls everything back
             undo, summary = actions.apply_actions(conn, result["actions"])
             log_id = actions.log_command(conn, text, reply, undo) if undo else None
-    except (ValidationError, ValueError) as e:
+        return summary, log_id
+
+    try:
+        # Calendar changes talk to Google, so run this off the main thread too.
+        summary, log_id = await run_in_threadpool(apply)
+    except (ValidationError, CalendarError, ValueError) as e:
         return {"status": "error", "reply": f"I couldn't apply that: {e}", "changes": [], "log_id": None}
 
     return {"status": "applied", "reply": reply, "changes": summary, "log_id": log_id}

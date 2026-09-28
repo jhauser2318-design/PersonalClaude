@@ -9,6 +9,8 @@ import json
 from ...database import register_schema, row_to_dict
 from ..goals import service
 from ..goals.service import ValidationError
+from ..calendar import service as calendar
+from ..calendar.google import CalendarError
 from ..habits import service as habits
 
 register_schema(
@@ -41,13 +43,49 @@ def _require(action: dict, key: str, what: str):
     return int(action[key])
 
 
+def _when(event: dict) -> str:
+    """ "Tue 29 Sep, 19:00–21:00" or "Tue 29 Sep (all day)". """
+    from datetime import date as _date
+    day = _date.fromisoformat(event["date"]).strftime("%a %d %b")
+    if event["all_day"]:
+        last = event["end"][:10]
+        if last != event["date"]:
+            return f"{day} – {_date.fromisoformat(last).strftime('%a %d %b')} (all day)"
+        return f"{day} (all day)"
+    return f"{day}, {event['start'][11:16]}–{event['end'][11:16]}"
+
+
+def _undo_event(change: dict) -> None:
+    """Reverse one calendar change (in Google Calendar)."""
+    if change["op"] == "created":
+        calendar.google.api("DELETE", f"/events/{change['id']}")
+    elif change["op"] == "updated":
+        calendar.restore_fields(change["id"], change["before"])
+    elif change["op"] == "deleted":
+        calendar.recreate(change["before"])
+
+
 def apply_actions(conn, actions: list[dict]) -> tuple[list[dict], list[str]]:
     """Apply every action. Returns (undo records, human-readable summaries).
 
-    Raises ValidationError if anything is invalid; the caller rolls back the
-    whole command so it's all-or-nothing.
+    Raises ValidationError (or CalendarError) if anything is invalid; the
+    caller rolls back the database, and calendar changes already made in this
+    command are reversed here, so it's all-or-nothing.
     """
     undo: list[dict] = []
+    try:
+        return _apply(conn, actions, undo)
+    except Exception:
+        for change in reversed(undo):
+            if change["kind"] == "event":
+                try:
+                    _undo_event(change)
+                except Exception:
+                    pass
+        raise
+
+
+def _apply(conn, actions: list[dict], undo: list[dict]) -> tuple[list[dict], list[str]]:
     summary: list[str] = []
     last_new_goal_id = None
 
@@ -152,6 +190,33 @@ def apply_actions(conn, actions: list[dict]) -> tuple[list[dict], list[str]]:
             streak = f" · 🔥 {h['streak']} streak" if h["streak"] > 1 else ""
             summary.append(f"Logged “{h['title']}”{amount}{when}{streak}")
 
+        elif kind == "create_event":
+            event = calendar.create_event(action.get("title") or "", action.get("start") or "",
+                                          action.get("end"), action.get("location") or "",
+                                          action.get("description") or "")
+            undo.append({"kind": "event", "op": "created", "id": event["id"], "before": None})
+            where = f" at {event['location']}" if event["location"] else ""
+            summary.append(f"📅 Added “{event['title']}” to your calendar ({_when(event)}){where}")
+
+        elif kind == "update_event":
+            event_id = action.get("event_id")
+            if not event_id:
+                raise ValidationError("Claude didn't say which calendar event to change")
+            before, after = calendar.update_event(event_id, {
+                "title": action.get("title"), "start": action.get("start"), "end": action.get("end"),
+                "location": action.get("location"), "description": action.get("description")})
+            undo.append({"kind": "event", "op": "updated", "id": event_id, "before": before})
+            summary.append(f"📅 Updated “{after['title']}” ({_when(after)})")
+
+        elif kind == "delete_event":
+            event_id = action.get("event_id")
+            if not event_id:
+                raise ValidationError("Claude didn't say which calendar event to remove")
+            before = calendar.delete_event(event_id)
+            undo.append({"kind": "event", "op": "deleted", "id": event_id, "before": before})
+            gone = calendar.simplify(before)
+            summary.append(f"📅 Removed “{gone['title']}” from your calendar ({_when(gone)})")
+
         else:
             raise ValidationError(f"Unknown action '{kind}'")
 
@@ -177,6 +242,12 @@ def undo_command(conn, log_id: int) -> str:
               "habit": "habits", "habit_log": "habit_logs"}
     # Undo in reverse order: the last change is reverted first.
     for change in reversed(json.loads(row["changes"])):
+        if change["kind"] == "event":
+            try:
+                _undo_event(change)
+            except CalendarError as e:
+                raise ValidationError(f"Couldn't undo the calendar change: {e}")
+            continue
         table = tables[change["kind"]]
         before = change["before"]
         if before is None:

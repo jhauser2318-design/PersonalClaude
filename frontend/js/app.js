@@ -81,6 +81,8 @@ async function updateBadge() {
 // ===========================================================================
 
 const EXAMPLES = [
+  "Schedule CPA study tomorrow 7–9pm at the library",
+  "When am I free this week for a 2-hour study block?",
   "Went to the gym and did my skincare",
   "Studied CPA for 2.5 hours today",
   "Set up a daily reading routine, 20 pages a day",

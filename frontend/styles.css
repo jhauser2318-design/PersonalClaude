@@ -806,6 +806,27 @@ a.btn { text-decoration: none; color: inherit; }
 .ai-notes { margin: 6px 0 0; padding-left: 18px; color: var(--text-2); font-size: 12.5px; display: grid; gap: 3px; }
 @media (max-width: 700px) { .ai-role { grid-template-columns: 1fr; gap: 6px; } }
 
+/* ---------- AI usage (Settings) ---------- */
+.use-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 8px 0 14px; }
+.use-stats > div { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
+.use-stats b { display: block; font: 650 19px var(--font-mono); margin-top: 5px; }
+.use-stats small { color: var(--text-3); font-size: 12px; }
+.use-credits { border-top: 1px solid var(--border); padding-top: 12px; }
+.use-credit-line { font-size: 13.5px; color: var(--text-2); margin-bottom: 8px; }
+.use-credit-line b { color: var(--text); }
+.use-bar { margin-bottom: 10px; --area: var(--success); }
+.use-credit-form { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.use-credit-form .field { width: 150px; }
+.use-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.use-table th { text-align: left; font: 600 10.5px var(--font-mono); text-transform: uppercase; letter-spacing: .1em; color: var(--text-3); padding: 6px 4px; border-bottom: 1px solid var(--border); }
+.use-table td { padding: 7px 4px; border-bottom: 1px solid var(--border); }
+.use-table th:not(:first-child), .use-table td:not(:first-child) { text-align: right; }
+.use-days { display: grid; grid-template-columns: repeat(30, minmax(0, 1fr)); gap: 3px; height: 70px; align-items: end; }
+.use-days span { height: 100%; display: flex; align-items: flex-end; border-bottom: 1px solid var(--border-strong); }
+.use-days i { display: block; width: 100%; border-radius: 3px 3px 0 0; background: var(--accent); }
+.use-days-axis { display: flex; justify-content: space-between; font: 11px var(--font-mono); color: var(--text-3); margin-top: 4px; }
+@media (max-width: 700px) { .use-stats { grid-template-columns: 1fr 1fr; } }
+
 /* ---------- Phone access ---------- */
 .login-screen { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; background: var(--bg, #070a12); }
 .login-card { width: min(380px, 100%); padding: 28px 24px; display: grid; gap: 12px; text-align: center; }

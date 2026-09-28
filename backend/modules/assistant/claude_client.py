@@ -260,6 +260,7 @@ def ask_claude(text: str, context: str, history: list[dict]) -> dict:
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     try:
         response = client.beta.messages.create(**request)
+        ai_models.record("command", response, request["model"])
     except anthropic.AuthenticationError:
         raise AssistantError("Anthropic rejected the API key. Check ANTHROPIC_API_KEY in your .env file.")
     except anthropic.PermissionDeniedError:

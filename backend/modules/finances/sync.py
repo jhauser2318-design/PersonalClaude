@@ -8,7 +8,7 @@ import logging
 import threading
 from datetime import date, datetime, timedelta
 
-from ...database import get_db
+from ...database import demo_on, get_db
 from ..assistant.claude_client import AssistantError
 from . import assistant, service, simplefin
 
@@ -37,6 +37,8 @@ def is_stale() -> bool:
 
 def run_sync() -> dict:
     """Fetch, save, then let the AI sort any new merchants. Raises FinanceError on failure."""
+    if demo_on():  # never pull real bank data into the demo
+        return {"accounts": 0, "new": 0, "demo": True}
     if not _lock.acquire(blocking=False):
         return {"busy": True}
     try:
@@ -91,7 +93,7 @@ def budget_alerts(conn) -> int:
 
 def sync_in_background(only_if_stale: bool = True) -> bool:
     """Start a sync without waiting for it. Returns True if one was started."""
-    if not simplefin.is_connected() or (only_if_stale and not is_stale()):
+    if demo_on() or not simplefin.is_connected() or (only_if_stale and not is_stale()):
         return False
     # Take the lock now (not in the thread), so the page sees "syncing" right away.
     if not _lock.acquire(blocking=False):

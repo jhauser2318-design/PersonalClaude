@@ -7,11 +7,28 @@ import { checkForUpdates } from "../updates.js";
 import { renderPhone } from "./phone.js";
 
 export async function render(view) {
-  const [status, version, ai] = await Promise.all([api.get("/command/status"), api.get("/version"), api.get("/command/models")]);
+  const [status, version, ai, demo] = await Promise.all([api.get("/command/status"), api.get("/version"),
+    api.get("/command/models"), api.get("/demo")]);
   const theme = getTheme();
   view.innerHTML = `
     <div class="page-head"><div><h1>Settings</h1></div></div>
     <div class="settings">
+      <section class="card demo-card ${demo.on ? "on" : ""}">
+        <h2>${demo.on ? "🎭 Demo mode is on" : "🎭 Demo mode"}</h2>
+        <p>${demo.on
+          ? `The whole app is showing made-up sample data (a person called Alex Morgan): goals, routines, calendar, email,
+             money and follow-ups. Your real data is untouched and comes back the moment you turn this off. Anything you
+             change now only changes the demo; nothing is sent, synced or saved to your accounts.`
+          : `Show the app to other people without showing your own information. Every page switches to realistic made-up
+             data, including a sample calendar, inbox, bank accounts and loans. Your real data stays safe and untouched,
+             and nothing in demo mode can email anyone or reach your bank.`}</p>
+        <div class="btn-row">
+          ${demo.on
+            ? `<button class="btn primary" id="demo-off">Turn off demo mode</button>
+               <button class="btn" id="demo-reset">Reset the sample data</button>`
+            : `<button class="btn primary" id="demo-on">Start demo mode</button>`}
+        </div>
+      </section>
       <section class="card ph-card" id="phone-settings"><p class="muted">Loading phone settings…</p></section>
       <section class="card" id="ai-models">
         <h2>AI models</h2>
@@ -61,6 +78,17 @@ export async function render(view) {
            When you use the command bar, your sentence plus a list of your goals and tasks is sent to Anthropic's API so Claude can understand it.</p>
       </section>
     </div>`;
+  const demoBtn = (id, action, msg) => view.querySelector(id)?.addEventListener("click", async (e) => {
+    e.currentTarget.disabled = true;
+    try {
+      await api.post(`/demo/${action}`);
+      toast(msg, 3000);
+      setTimeout(() => location.reload(), 400); // redraw everything with the other data
+    } catch (err) { toast(err.message, 8000); e.currentTarget.disabled = false; }
+  });
+  demoBtn("#demo-on", "on", "Demo mode on: showing sample data");
+  demoBtn("#demo-off", "off", "Demo mode off: back to your data");
+  demoBtn("#demo-reset", "reset", "Sample data reset");
   renderPhone(view.querySelector("#phone-settings")).catch((err) => {
     view.querySelector("#phone-settings").innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
   });

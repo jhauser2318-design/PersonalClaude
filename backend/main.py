@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config
 from .areas import AREAS
-from .database import data_version, get_db, init_db
+from .database import DEMO_PATH, data_version, demo_on, get_db, init_db
 from .modules import MODULES
 from .modules.remote import auth as remote_auth
 
@@ -31,7 +31,9 @@ async def lifespan(app: FastAPI):
     RUNNING["version"] = _read_version().get("sha")
     RUNNING["last_ping"] = time.time()
     init_db()
-    with get_db() as conn:
+    if demo_on():
+        init_db(DEMO_PATH)
+    with get_db(real=True) as conn:
         for module in MODULES:
             if module.on_startup:
                 module.on_startup(conn)
@@ -73,7 +75,7 @@ async def phone_sign_in(request, call_next):
         if path.startswith(PC_ONLY_PAGES):
             return HTMLResponse("<p style='font:16px system-ui;padding:24px'>Connecting Google only works on your PC: "
                                 "open the app there and click Connect.</p>", status_code=400)
-        with get_db() as conn:
+        with get_db(real=True) as conn:
             signed_in = remote_auth.session(conn, request.cookies.get(remote_auth.COOKIE)) is not None
         if not signed_in:
             return JSONResponse({"detail": "Sign in with your passcode.", "code": "login"}, status_code=401)
@@ -107,7 +109,7 @@ def app_info():
 def app_ping():
     RUNNING["last_ping"] = time.time()
     # Windows compare this with the version they loaded, and refresh if it changed.
-    return {"ok": True, "version": RUNNING["version"], "data_version": data_version()}
+    return {"ok": True, "version": RUNNING["version"], "data_version": data_version(), "demo": demo_on()}
 
 
 def _load_updater():
@@ -141,6 +143,27 @@ async def app_update(background: BackgroundTasks):
         "version": (v.get("sha") or "")[:7] or None,
         "summary": v.get("summary"),
     }
+
+
+# --- Demo mode (Settings → Demo mode) ---------------------------------------------
+
+@app.get("/api/demo")
+def demo_status():
+    from . import demo
+    return demo.status()
+
+
+@app.post("/api/demo/{action}")
+async def demo_switch(action: str):
+    from fastapi import HTTPException
+    from . import demo
+    fn = {"on": demo.enable, "off": demo.disable, "reset": demo.reset}.get(action)
+    if not fn:
+        raise HTTPException(status_code=404, detail="Unknown demo action")
+    try:
+        return await run_in_threadpool(fn)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 def _read_version() -> dict:

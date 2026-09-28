@@ -81,7 +81,7 @@ def oauth_callback(code: str | None = None, state: str | None = None, error: str
 
 @router.post("/disconnect")
 def disconnect():
-    google.disconnect()
+    _run(google.disconnect)
     return status()
 
 

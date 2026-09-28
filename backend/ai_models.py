@@ -30,13 +30,13 @@ ROLES = {
 
 
 def model_for(role: str) -> str:
-    with get_db() as conn:
+    with get_db(real=True) as conn:
         chosen = get_setting(conn, f"ai_model_{role}")
     return chosen if chosen in MODEL_IDS else ROLES[role]["default"]
 
 
 def choices() -> dict:
-    with get_db() as conn:
+    with get_db(real=True) as conn:
         current = {r: get_setting(conn, f"ai_model_{r}") for r in ROLES}
     return {
         "models": MODELS,
@@ -50,7 +50,7 @@ def set_model(role: str, model: str) -> None:
         raise ValueError(f"Unknown AI feature '{role}'")
     if model not in MODEL_IDS:
         raise ValueError(f"Unknown model '{model}'")
-    with get_db() as conn:
+    with get_db(real=True) as conn:
         set_setting(conn, f"ai_model_{role}", model)
 
 

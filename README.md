@@ -256,6 +256,25 @@ Your PC stays the "home base": the app and all your data live there, and your ph
 
 Good to know: the phone can reach the app whenever the PC is on, awake and signed in to Windows. Connecting Google (Calendar/Gmail) is done on the PC. Signed-in phones are listed under **Settings → Phone & devices**, where you can sign them out; setting a new passcode signs out every phone.
 
+### Demo mode (show the app without your personal information)
+
+**Settings → Demo mode → Start demo mode** switches the whole app, on the PC and on your phone, to realistic made-up data for "Alex Morgan":
+- goals, tasks and routines with streak history
+- a sample calendar and email inbox
+- a shopping list and follow-ups
+- three months of bank and card activity, budgets, rules and loans
+
+A small **DEMO** tag shows in the top bar. **Turn off demo mode** brings your own data straight back; **Reset the sample data** undoes anything changed during a demo.
+
+What's protected while demo mode is on:
+- **Your real data isn't touched.** The demo uses a separate file (`data\demo.db`).
+- **Nothing reaches your real accounts.** Google Calendar and Gmail are replaced by the sample calendar and inbox, and sending an email only pretends to send.
+- **Bank syncing pauses**, and connecting or disconnecting accounts is blocked.
+- **Your real reminders wait.** They're held, so nothing personal pops up on screen, and they appear once you turn demo mode off.
+- **Private settings stay hidden.** Settings → Phone & devices hides your account details.
+
+The AI bar and assistants work normally on the sample data. They still use your Anthropic API key, so they still cost the usual small amount.
+
 ### Example data
 
 The first time you start the app, it adds one example goal per life area plus a few tasks, so you can try things out. When you're ready for your own data, go to **Settings → Clear example data**. This removes only the examples, never anything you created. **Load examples again** brings them back.

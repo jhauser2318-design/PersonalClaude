@@ -1,4 +1,4 @@
-"""API endpoints for Home & admin."""
+"""API endpoints for Home maintenance."""
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 

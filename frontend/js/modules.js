@@ -20,7 +20,7 @@ import * as settings from "./views/settings.js";
 import * as shopping from "./views/shopping.js";
 import * as tasks from "./views/tasks.js";
 
-export const GROUPS = ["", "Plan", "Life", "Money", "Home & admin"];
+export const GROUPS = ["", "Plan", "Life", "Money"];
 
 export const MODULES = [
   { id: "dashboard", label: "Dashboard", icon: "home", view: dashboard, group: "" },
@@ -36,11 +36,13 @@ export const MODULES = [
   { id: "email", label: "Email", icon: "mail", view: email, group: "Life" },
   { id: "finances", label: "Finances", icon: "wallet", view: finances, group: "Money" },
   { id: "shopping", label: "Shopping list", icon: "cart", view: shopping, group: "Money" },
-  { id: "home", label: "Home & admin", icon: "wrench", view: home, group: "Home & admin" },
 ];
 
 // Pages under a life area in the sidebar (e.g. the CPA planner under Education).
-export const AREA_PAGES = { education: [{ id: "cpa", label: "CPA exam", icon: "book" }] };
+export const AREA_PAGES = {
+  health: [{ id: "home", label: "Home maintenance", icon: "wrench" }],
+  education: [{ id: "cpa", label: "CPA exam", icon: "book" }],
+};
 
 // Pages that aren't in the main list but still have a web address.
-export const EXTRA_ROUTES = { area, settings, cpa };
+export const EXTRA_ROUTES = { area, settings, cpa, home };

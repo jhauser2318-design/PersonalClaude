@@ -44,12 +44,15 @@
   </div>
   <script>
     const APP = "http://localhost:8000";
+    // Opened from a notification: go straight to that page (e.g. #followups).
+    const page = location.hash.slice(1).replace(/[^a-z0-9/-]/gi, "");
+    const TARGET = page ? `${APP}/#/${page}` : APP;
     const started = Date.now();
     const status = document.getElementById("status");
 
     function tryApp() {
       const probe = new Image();
-      probe.onload = () => location.replace(APP);
+      probe.onload = () => location.replace(TARGET);
       probe.onerror = () => {
         const secs = (Date.now() - started) / 1000;
         if (secs > 6) status.textContent = "Starting the app…";

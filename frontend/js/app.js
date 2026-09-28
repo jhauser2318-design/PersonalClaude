@@ -20,10 +20,10 @@ function buildNav() {
   const main = MODULES.filter((m) => !m.comingSoon);
   const soon = MODULES.filter((m) => m.comingSoon);
   $("#nav").innerHTML = `
-    ${main.map((m) => link(`#/${m.id}`, `${icon(m.icon)}${esc(m.label)}${m.id === "routines" ? `<span class="nav-badge" id="routine-badge" hidden></span>` : ""}`)).join("")}
+    ${main.map((m) => link(`#/${m.id}`, `${icon(m.icon)}${esc(m.label)}${m.id === "routines" ? `<span class="nav-badge" id="routine-badge" hidden></span>` : ""}${m.id === "followups" ? `<span class="nav-badge" id="followup-badge" hidden></span>` : ""}`)).join("")}
     <div class="nav-section eyebrow">Life areas</div>
     ${state.areas.map((a) => link(`#/area/${a.id}`, `<span class="dot" style="--area:${a.color}"></span>${esc(a.name)}`)).join("")}
-    <div class="nav-section eyebrow">Coming soon</div>
+    ${soon.length ? `<div class="nav-section eyebrow">Coming soon</div>` : ""}
     ${soon.map((m) => link(`#/${m.id}`, `${icon(m.icon)}${esc(m.label)}<span class="soon">Soon</span>`, "disabled")).join("")}
     <div class="nav-section"></div>
     ${link("#/settings", `${icon("settings")}Settings`)}
@@ -78,6 +78,13 @@ async function updateBadge() {
     badge.textContent = left;
     badge.hidden = left === 0;
   } catch (e) { badge.hidden = true; }
+  const fu = $("#followup-badge");
+  if (!fu) return;
+  try {
+    const { summary } = await api.get("/followups");
+    fu.textContent = summary.due;
+    fu.hidden = summary.due === 0;
+  } catch (e) { fu.hidden = true; }
 }
 
 // ===========================================================================
@@ -85,6 +92,9 @@ async function updateBadge() {
 // ===========================================================================
 
 const EXAMPLES = [
+  "Remind me to call Mom at 6pm",
+  "Follow up with Sarah about the contract Friday at 10am",
+  "Remind me every day at 7am to do my skincare",
   "How much did I spend on dining last month?",
   "Am I on track with my budget this month?",
   "What subscriptions am I paying for?",

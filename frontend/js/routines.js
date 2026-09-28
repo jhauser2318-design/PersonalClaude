@@ -42,7 +42,7 @@ export function routineRow(h) {
     ${orb(h)}
     <div class="r-main">
       <div class="r-title">${esc(h.title)}</div>
-      <div class="r-meta">${areaTag(h.area)}<span>${progressText(h)}</span></div>
+      <div class="r-meta">${areaTag(h.area)}<span>${progressText(h)}</span>${h.remind_at ? `<span title="Daily reminder">🔔 ${esc(h.remind_at)}</span>` : ""}</div>
     </div>
     ${streakBadge(h)}
   </li>`;
@@ -70,6 +70,7 @@ export function routineCard(h) {
         <h3 class="rt-title">${esc(h.title)}</h3>
         <div class="rt-sub">${areaTag(h.area)}<span>${esc(h.schedule_text)}</span>
           ${h.goal_title ? `<span>↳ ${esc(h.goal_title)}</span>` : ""}
+          ${h.remind_at ? `<span title="Daily reminder">🔔 ${esc(h.remind_at)}</span>` : ""}
           ${h.active ? "" : `<span class="pill paused">Paused</span>`}</div>
       </div>
       <div class="rt-actions">
@@ -180,6 +181,8 @@ export async function openRoutineEditor(h = {}, onChange = () => state.refresh()
           <label class="field"><span>Unit</span>
             <input type="text" name="unit" value="${esc(h.unit || "")}" placeholder="e.g. hours, pages, km"></label>
         </div>
+        <label class="field"><span>Daily reminder (optional) · only if it isn't done yet</span>
+          <input type="time" name="remind_at" value="${esc(h.remind_at || "")}"></label>
       </form>`,
     foot: `
       ${isNew ? "" : `<button class="btn danger" data-delete>${icon("trash")} Delete</button>`}
@@ -221,6 +224,8 @@ export async function openRoutineEditor(h = {}, onChange = () => state.refresh()
       target_amount: form.target_amount.value ? Number(form.target_amount.value) : null,
       unit: form.unit.value.trim() || null,
     };
+    const remind = form.remind_at.value || null;
+    if (isNew ? remind : remind !== (h.remind_at || null)) body.remind_at = remind;
     try {
       if (isNew) await api.post("/habits", body);
       else await api.patch(`/habits/${h.id}`, body);

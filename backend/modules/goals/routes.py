@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ...database import get_db
+from ..followups import service as reminders
 from . import dashboard, seed, service
 
 router = APIRouter(prefix="/api", tags=["goals"])
@@ -42,6 +43,7 @@ class TaskIn(BaseModel):
     due_date: str | None = None
     priority: Priority = "medium"
     done: bool = False
+    remind_at: str | None = None
 
 
 class TaskPatch(BaseModel):
@@ -51,6 +53,7 @@ class TaskPatch(BaseModel):
     due_date: str | None = None
     priority: Priority | None = None
     done: bool | None = None
+    remind_at: str | None = None   # "YYYY-MM-DDTHH:MM"; null removes the reminder
 
 
 def _run(fn, *args):
@@ -116,17 +119,32 @@ def list_tasks(area: str | None = None, goal_id: int | None = None):
 
 @router.post("/tasks")
 def create_task(body: TaskIn):
-    return _run(service.create_task, body.model_dump())
+    def work(conn):
+        task = service.create_task(conn, body.model_dump(exclude={"remind_at"}))
+        if body.remind_at:
+            reminders.set_reminder(conn, "task", task["id"], body.remind_at)
+        return service.get_task(conn, task["id"])
+    return _run(work)
 
 
 @router.patch("/tasks/{task_id}")
 def update_task(task_id: int, body: TaskPatch):
-    return _run(service.update_task, task_id, body.model_dump(exclude_unset=True))
+    fields = body.model_dump(exclude_unset=True)
+
+    def work(conn):
+        service.update_task(conn, task_id, {k: v for k, v in fields.items() if k != "remind_at"})
+        if "remind_at" in fields:
+            reminders.set_reminder(conn, "task", task_id, fields["remind_at"])
+        return service.get_task(conn, task_id)
+    return _run(work)
 
 
 @router.delete("/tasks/{task_id}")
 def delete_task(task_id: int):
-    _run(service.delete_task, task_id)
+    def work(conn):
+        service.delete_task(conn, task_id)
+        reminders.set_reminder(conn, "task", task_id, None)
+    _run(work)
     return {"ok": True}
 
 

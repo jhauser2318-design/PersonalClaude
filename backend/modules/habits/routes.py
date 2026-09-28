@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from ...database import get_db
 from ..goals.service import ValidationError
+from ..followups import service as reminders
 from . import service
 
 router = APIRouter(prefix="/api/habits", tags=["routines"])
@@ -22,6 +23,7 @@ class HabitIn(BaseModel):
     times_per_week: int | None = None
     target_amount: float | None = None
     unit: str | None = None
+    remind_at: str | None = None
 
 
 class HabitPatch(BaseModel):
@@ -34,6 +36,7 @@ class HabitPatch(BaseModel):
     target_amount: float | None = None
     unit: str | None = None
     active: bool | None = None
+    remind_at: str | None = None   # daily reminder "HH:MM"; null removes it
 
 
 class LogIn(BaseModel):
@@ -65,17 +68,32 @@ def get_habit(habit_id: int):
 
 @router.post("")
 def create_habit(body: HabitIn):
-    return _run(service.create_habit, body.model_dump())
+    def work(conn):
+        habit = service.create_habit(conn, body.model_dump(exclude={"remind_at"}))
+        if body.remind_at:
+            reminders.set_reminder(conn, "routine", habit["id"], body.remind_at)
+        return service.get_habit(conn, habit["id"])
+    return _run(work)
 
 
 @router.patch("/{habit_id}")
 def update_habit(habit_id: int, body: HabitPatch):
-    return _run(service.update_habit, habit_id, body.model_dump(exclude_unset=True))
+    fields = body.model_dump(exclude_unset=True)
+
+    def work(conn):
+        service.update_habit(conn, habit_id, {k: v for k, v in fields.items() if k != "remind_at"})
+        if "remind_at" in fields:
+            reminders.set_reminder(conn, "routine", habit_id, fields["remind_at"])
+        return service.get_habit(conn, habit_id)
+    return _run(work)
 
 
 @router.delete("/{habit_id}")
 def delete_habit(habit_id: int):
-    _run(service.delete_habit, habit_id)
+    def work(conn):
+        service.delete_habit(conn, habit_id)
+        reminders.set_reminder(conn, "routine", habit_id, None)
+    _run(work)
     return {"ok": True}
 
 

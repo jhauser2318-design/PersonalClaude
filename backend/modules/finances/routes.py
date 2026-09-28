@@ -7,7 +7,7 @@ from ... import config
 from ...database import get_db
 from ..assistant.claude_client import AssistantError
 from ..goals.service import ValidationError
-from . import assistant, service, simplefin, sync
+from . import assistant, planning, service, simplefin, sync
 
 router = APIRouter(prefix="/api/finances", tags=["finances"])
 
@@ -284,3 +284,81 @@ def delete_loan(loan_id: int):
 @router.post("/loans/{loan_id}/forecast")
 def forecast(loan_id: int, body: ForecastIn):
     return _run(service.loan_forecast, loan_id, body.extra, body.lump)
+
+
+# ---------------------------------------------------------------------------
+# Bills & subscriptions, savings goals
+# ---------------------------------------------------------------------------
+
+class BillIn(BaseModel):
+    name: str
+    amount: float = 0
+    due_day: int
+    frequency: str = "monthly"
+    start_month: int | None = None
+    category: str = "Utilities & Phone"
+    autopay: bool = False
+    subscription: bool = False
+    notes: str = ""
+
+
+class SubFlagIn(BaseModel):
+    merchant: str
+    status: str
+    note: str = ""
+
+
+class SavingsIn(BaseModel):
+    name: str
+    target: float
+    saved: float = 0
+    account_id: str | None = None
+    target_date: str | None = None
+    goal_id: int | None = None
+
+
+@router.get("/bills")
+def bills(month: str | None = None):
+    return _run(planning.bills_for_month, month)
+
+
+@router.post("/bills")
+def add_bill(body: BillIn):
+    return _run(planning.save_bill, body.model_dump())
+
+
+@router.patch("/bills/{bill_id}")
+def update_bill(bill_id: int, body: BillIn):
+    return _run(planning.save_bill, body.model_dump(), bill_id)
+
+
+@router.delete("/bills/{bill_id}")
+def delete_bill(bill_id: int):
+    _run(planning.delete_bill, bill_id)
+    return {"ok": True}
+
+
+@router.put("/subscriptions")
+def flag_subscription(body: SubFlagIn):
+    return _run(planning.set_sub_flag, body.merchant, body.status, body.note)
+
+
+@router.get("/savings")
+def savings():
+    return _run(planning.savings_overview)
+
+
+@router.post("/savings")
+def add_savings(body: SavingsIn):
+    return _run(planning.save_savings, body.model_dump())
+
+
+@router.patch("/savings/{goal_id}")
+def update_savings(goal_id: int, body: SavingsIn):
+    return _run(planning.save_savings, body.model_dump(), goal_id)
+
+
+@router.delete("/savings/{goal_id}")
+def delete_savings(goal_id: int):
+    _run(planning.delete_savings, goal_id)
+    return {"ok": True}

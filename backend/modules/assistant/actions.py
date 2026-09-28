@@ -5,6 +5,7 @@ command_log table. Undo simply puts those copies back (or deletes items the
 command created).
 """
 import json
+from datetime import date as _date
 
 from ...database import register_schema, row_to_dict
 from ..goals import service
@@ -15,6 +16,10 @@ from ..followups import service as followups
 from ..habits import service as habits
 from ..shopping import links as shopping_links
 from ..shopping import service as shopping
+from ..cpa import service as cpa
+from ..fitness import service as fitness
+from ..people import service as people
+from ..schedule import service as schedule
 
 register_schema(
     """
@@ -105,6 +110,7 @@ def apply_actions(conn, actions: list[dict]) -> tuple[list[dict], list[str]]:
 def _apply(conn, actions: list[dict], undo: list[dict]) -> tuple[list[dict], list[str]]:
     summary: list[str] = []
     last_new_goal_id = None
+    pending_workouts: dict[str, list[dict]] = {}
 
     for action in actions:
         kind = action.get("type")
@@ -333,10 +339,116 @@ def _apply(conn, actions: list[dict], undo: list[dict]) -> tuple[list[dict], lis
                 raise ValidationError(f"That {rkind} doesn't exist")
             summary.append(f"“{row['title']}”: {_remind(conn, undo, rkind, int(ref_id), action['remind_at'])}")
 
+        elif kind == "add_schedule_block":
+            start_raw = action.get("start") or ""
+            day = action.get("date") or (start_raw[:10] if "T" in start_raw else "") or _date.today().isoformat()
+            start = schedule.clean_time(action.get("start") or "", "start time")
+            end = action.get("end")
+            if not end:
+                h, m = map(int, start.split(":"))
+                end = f"{min(h + 1, 24):02d}:{m:02d}"
+            block = schedule.create_block(conn, {"date": day, "start": start, "end": end, "title": action.get("title"),
+                                                 "area": action.get("area"), "notes": action.get("note") or ""})
+            undo.append({"kind": "block", "id": block["id"], "before": None})
+            summary.append(f"🗓 {_day_label(block['date'])} {block['start']}–{block['end']}: {block['title']} (your schedule)")
+
+        elif kind == "update_schedule_block":
+            block_id = _require(action, "block_id", "schedule block")
+            before = schedule.get_block(conn, block_id)
+            if before is None:
+                raise ValidationError(f"Schedule block #{block_id} doesn't exist")
+            fields = {"date": action.get("date"), "start": action.get("start"), "end": action.get("end"),
+                      "title": action.get("title"), "area": action.get("area"), "notes": action.get("note"),
+                      "done": action.get("done")}
+            fields = {k: v for k, v in fields.items() if v is not None}
+            if not fields:
+                continue
+            after = schedule.update_block(conn, block_id, fields)
+            undo.append({"kind": "block", "id": block_id, "before": before})
+            if "done" in fields and len(fields) == 1:
+                summary.append(f"🗓 {'Done ✓' if after['done'] else 'Reopened'}: {after['title']}")
+            else:
+                summary.append(f"🗓 Moved/updated: {_day_label(after['date'])} {after['start']}–{after['end']} {after['title']}")
+
+        elif kind == "remove_schedule_block":
+            block_id = _require(action, "block_id", "schedule block")
+            before = schedule.get_block(conn, block_id)
+            if before is None:
+                raise ValidationError(f"Schedule block #{block_id} doesn't exist")
+            schedule.delete_block(conn, block_id)
+            undo.append({"kind": "deleted", "table": "schedule_blocks", "before": before})
+            summary.append(f"🗓 Removed {before['start']}–{before['end']} {before['title']} from your schedule")
+
+        elif kind == "log_cpa_score":
+            row = cpa.add_score(conn, action.get("title") or "", action.get("amount"), action.get("date"),
+                                "practice exam", action.get("note") or "")
+            undo.append({"kind": "cpa_score", "id": row["id"], "before": None})
+            summary.append(f"📚 {row['section']} practice score {row['score']:g}% saved")
+
+        elif kind == "add_person":
+            rel = (action.get("description") or "").lower()
+            person = people.create_person(conn, {
+                "name": action.get("title") or action.get("person"), "birthday": action.get("date"),
+                "relation": rel if rel in people.RELATIONS else "", "notes": action.get("note") or "",
+                "cadence_days": int(action["amount"]) if action.get("amount") else None})
+            undo.append({"kind": "person", "id": person["id"], "before": None})
+            extra = f", birthday {person['birthday'][5:]}" if person["birthday"] else ""
+            extra += f", reach out every {person['cadence_days']} days" if person["cadence_days"] else ""
+            summary.append(f"👤 Added {person['name']} to People{extra}")
+
+        elif kind == "log_contact":
+            person = people.find_person(conn, action.get("person") or action.get("title") or "")
+            if person is None:
+                raise ValidationError(f"“{action.get('person')}” isn't in People yet")
+            how = (action.get("title") or "talked").lower()
+            row = people.log_contact(conn, person["id"], action.get("date"), how, action.get("note") or "")
+            undo.append({"kind": "interaction", "id": row["id"], "before": None})
+            summary.append(f"👤 Logged: {row['kind']} with {person['name']}" + (f" ({row['note']})" if row["note"] else ""))
+
+        elif kind == "log_workout":
+            day = action.get("date") or _date.today().isoformat()
+            pending_workouts.setdefault(day, []).append(action)
+
+        elif kind == "log_body_weight":
+            res = fitness.log_weight(conn, action.get("amount"), action.get("date"))
+            undo.append({"kind": "body_weight", "date": res["date"], "before": res["before"]})
+            summary.append(f"⚖ Body weight {res['weight']:g} lb ({_day_label(res['date'])})")
+
         else:
             raise ValidationError(f"Unknown action '{kind}'")
 
+    for day, items in pending_workouts.items():
+        summary.append(_save_workout(conn, undo, day, items))
+
     return undo, summary
+
+
+def _day_label(day: str) -> str:
+    return _date.fromisoformat(day).strftime("%a %d %b")
+
+
+def _save_workout(conn, undo: list[dict], day: str, items: list[dict]) -> str:
+    """All log_workout actions for one day become one workout (added to that day's workout if there is one)."""
+    lifts = [a for a in items if not a.get("minutes")]
+    cardio = [a for a in items if a.get("minutes")]
+    sets = [{"exercise": a.get("title") or "Exercise", "sets": a.get("sets") or 1, "reps": a.get("reps") or 0,
+             "weight": a.get("amount") or 0} for a in lifts]
+    minutes = sum(a["minutes"] for a in cardio) or None
+    title = ", ".join(dict.fromkeys((a.get("title") or "Workout") for a in items))[:60]
+    notes = "; ".join(a["note"] for a in items if a.get("note"))
+    habit = fitness.gym_habit(conn)
+    had_log = habit and habits.get_log(conn, habit["id"], day)
+    w = fitness.save_workout(conn, {"date": day, "kind": "cardio" if cardio and not lifts else "strength",
+                                    "title": title, "minutes": minutes, "notes": notes, "sets": sets})
+    undo.append({"kind": "workout", "id": w["id"], "before": None})
+    if habit and not had_log:
+        log = habits.get_log(conn, habit["id"], day)
+        if log:
+            undo.append({"kind": "habit_log", "id": log["id"], "before": None})
+    bits = [f"{s['exercise']} {s['sets']}×{s['reps']}" + (f" @ {s['weight']:g} lb" if s["weight"] else "") for s in w["sets"]]
+    if minutes:
+        bits.append(f"{minutes:g} min")
+    return f"🏋 Workout logged ({_day_label(day)}): " + ", ".join(bits) + (f" · ✓ {habit['title']}" if habit and not had_log else "")
 
 
 def log_command(conn, text: str, reply: str, undo: list[dict]) -> int:
@@ -356,7 +468,8 @@ def undo_command(conn, log_id: int) -> str:
 
     tables = {"goal": "goals", "task": "tasks", "note": "goal_notes",
               "habit": "habits", "habit_log": "habit_logs", "shopping": "shopping_items",
-              "followup": "followups"}
+              "followup": "followups", "block": "schedule_blocks", "cpa_score": "cpa_scores",
+              "person": "people", "interaction": "interactions", "workout": "workouts"}
     # Undo in reverse order: the last change is reverted first.
     for change in reversed(json.loads(row["changes"])):
         if change["kind"] == "event":
@@ -371,6 +484,22 @@ def undo_command(conn, log_id: int) -> str:
         if change["kind"] == "reminder":
             followups.restore_reminder(conn, change["rkind"], change["ref_id"], change["before"])
             continue
+        if change["kind"] == "deleted":
+            cols = list(change["before"])
+            conn.execute(f"INSERT INTO {change['table']} ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})",
+                         [change["before"][c] for c in cols])
+            continue
+        if change["kind"] == "body_weight":
+            if change["before"]:
+                conn.execute("INSERT OR REPLACE INTO body_weight (date, weight) VALUES (?, ?)",
+                             (change["before"]["date"], change["before"]["weight"]))
+            else:
+                conn.execute("DELETE FROM body_weight WHERE date = ?", (change["date"],))
+            continue
+        if change["kind"] == "workout":
+            conn.execute("DELETE FROM workout_sets WHERE workout_id = ?", (change["id"],))
+        if change["kind"] == "person":
+            conn.execute("DELETE FROM interactions WHERE person_id = ?", (change["id"],))
         table = tables[change["kind"]]
         before = change["before"]
         if before is None:

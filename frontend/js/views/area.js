@@ -30,6 +30,14 @@ export async function render(view, areaId) {
         <div><b>${routines.filter((h) => h.done_today).length}/${routines.filter((h) => h.due_today).length}</b>routines today</div>
       </div>
     </div>
+    ${areaId === "education" ? `<a class="card area-link" href="#/cpa" style="--area:${area.color}">${icon("book")}
+      <div><b>CPA Exam Planner</b><div class="muted small">Exam dates, study hours vs plan, practice scores, credit window</div></div><span>→</span></a>` : ""}
+    ${areaId === "health" ? `<div class="area-links"><a class="card area-link" href="#/workouts" style="--area:${area.color}">${icon("dumbbell")}
+      <div><b>Workouts</b><div class="muted small">Sessions, records, body weight</div></div><span>→</span></a>
+      <a class="card area-link" href="#/meals" style="--area:${area.color}">${icon("utensils")}
+      <div><b>Meals</b><div class="muted small">This week's plan and recipes</div></div><span>→</span></a></div>` : ""}
+    ${areaId === "social" ? `<a class="card area-link" href="#/people" style="--area:${area.color}">${icon("users")}
+      <div><b>People</b><div class="muted small">Birthdays and staying in touch</div></div><span>→</span></a>` : ""}
     <h2 class="section">Goals <span class="count">${goals.length}</span><span class="line"></span></h2>
     <div id="area-goals">${goalGrid(goals, `No ${area.name.toLowerCase()} goals yet.`)}</div>
     <h2 class="section">Routines <span class="count">${routines.length}</span><span class="line"></span><a href="#/routines">Details →</a></h2>

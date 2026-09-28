@@ -12,6 +12,14 @@ from ..modules.followups import service as followups
 from ..modules.goals import service as goals
 from ..modules.habits import service as habits
 from ..modules.shopping import service as shopping
+from ..modules.cpa import service as cpa
+from ..modules.finances import planning
+from ..modules.fitness import service as fitness
+from ..modules.home import service as home
+from ..modules.meals import service as meals
+from ..modules.people import service as people
+from ..modules.review import service as review
+from ..modules.schedule import service as schedule
 
 
 def _iso(d: date) -> str:
@@ -139,6 +147,7 @@ def seed(conn) -> None:
                      "VALUES (?, ?, ?, ?, ?, ?, ?)", (kind, title, body, link, stamp, stamp, stamp if hours_ago > 24 else None))
 
     _seed_finances(conn, today, rnd)
+    _seed_life(conn, today, rnd, g)
 
 
 def _seed_finances(conn, today: date, rnd: random.Random) -> None:
@@ -266,3 +275,146 @@ def _seed_finances(conn, today: date, rnd: random.Random) -> None:
     fin.save_loan(conn, {"name": "Car loan", "lender": "Demo Auto Finance", "balance": 8600, "apr": 6.9, "payment": 310,
                          "due_day": 3})
     fin.save_sync_status(conn, ok=True, messages=[])
+
+
+def _seed_life(conn, today: date, rnd: random.Random, g: dict) -> None:
+    """Schedule, CPA planner, people, workouts, meals, home & admin, weekly review, bills and savings."""
+    D = lambda n: today + timedelta(days=n)  # noqa: E731
+    habit_id = lambda title: conn.execute("SELECT id FROM habits WHERE title = ?", (title,)).fetchone()[0]  # noqa: E731
+
+    # --- Schedule: typical days, and today's plan ---------------------------------
+    workday = [("06:30", "07:30", "Gym", "health"), ("08:30", "11:30", "Deep work: dashboard migration", "work"),
+               ("12:00", "12:45", "Lunch walk", "health"), ("13:00", "17:00", "Meetings & email", "work"),
+               ("19:00", "21:00", "CPA study: FAR", "education"), ("21:30", "22:00", "Read 20 pages", "education")]
+    weekend = [("08:00", "09:30", "Long run", "health"), ("10:00", "13:00", "CPA study: practice exam", "education"),
+               ("15:00", "17:00", "Groceries & meal prep", "health"), ("19:00", "22:00", "Friends", "social")]
+    as_blocks = lambda rows: [{"start": a, "end": b, "title": t, "area": ar} for a, b, t, ar in rows]  # noqa: E731
+    schedule.save_template(conn, "Workday", [0, 1, 2, 3, 4], as_blocks(workday))
+    schedule.save_template(conn, "Weekend", [5, 6], as_blocks(weekend))
+    for back in range(0, 8):
+        day = D(-back)
+        rows = workday if day.weekday() < 5 else weekend
+        for a, b, t, ar in rows:
+            block = schedule.create_block(conn, {"date": day.isoformat(), "start": a, "end": b, "title": t, "area": ar})
+            if back > 0 or b <= datetime.now().strftime("%H:%M"):
+                if rnd.random() < 0.8:
+                    schedule.update_block(conn, block["id"], {"done": True})
+    for back in range(0, 7):
+        for _ in range(rnd.choice([0, 1, 2])):
+            conn.execute("INSERT INTO focus_sessions (started_at, minutes, label, habit_id) VALUES (?, ?, ?, ?)",
+                         (_stamp(D(-back), 19), rnd.choice([25, 50, 50]), "FAR", habit_id("CPA study")))
+
+    # --- CPA planner -----------------------------------------------------------------
+    cpa.overview(conn)  # creates FAR, AUD, REG, BAR
+    ids = {r["code"]: r["id"] for r in conn.execute("SELECT id, code FROM cpa_sections")}
+    cpa.save_settings(conn, habit_id("CPA study"), 30)
+    cpa.update_section(conn, ids["AUD"], {"status": "passed", "passed_date": D(-160).isoformat(), "score": 82,
+                                          "study_start": D(-260).isoformat(), "exam_date": D(-160).isoformat()})
+    cpa.update_section(conn, ids["FAR"], {"status": "scheduled", "study_start": D(-70).isoformat(), "exam_date": D(74).isoformat(),
+                                          "target_hours": 300, "notes": "Becker. Weak spots: leases, governmental."})
+    cpa.update_section(conn, ids["REG"], {"exam_date": None})
+    for back, score, kind in [(-60, 64, "practice exam"), (-45, 69, "practice exam"), (-31, 72, "quiz"),
+                              (-17, 74, "practice exam"), (-3, 78, "practice exam")]:
+        cpa.add_score(conn, "FAR", score, D(back).isoformat(), kind)
+
+    # --- People ----------------------------------------------------------------------
+    bday = lambda n, year: D(n).replace(year=year).isoformat()  # noqa: E731
+    for name, rel, birthday, cadence, notes, contacts in [
+        ("Mom", "family", bday(9, 1966), 7, "Loves gardening; ask about the tomatoes.", [(-3, "call", "Talked about Thanksgiving")]),
+        ("Dad", "family", "1964-02-11", 14, "", [(-19, "call", "")]),
+        ("Sam Rivera", "friend", bday(3, 1995), 21, "Lisbon trip organizer. Partner: Jordan.", [(-4, "met", "Lisbon planning dinner")]),
+        ("Priya Patel", "mentor", None, 30, "Senior manager; promotion sponsor.", [(-6, "met", "Promotion case check-in")]),
+        ("Jake Kim", "friend", "0000-06-03", 14, "College roommate, lives in Denver.", [(-33, "text", "")]),
+        ("Grandma Rose", "family", "1941-12-24", 10, "Call on Sundays.", [(-12, "call", "")]),
+    ]:
+        p = people.create_person(conn, {"name": name, "relation": rel, "birthday": birthday, "cadence_days": cadence, "notes": notes})
+        for back, kind, note in contacts:
+            people.log_contact(conn, p["id"], D(back).isoformat(), kind, note)
+
+    # --- Workouts --------------------------------------------------------------------
+    bench, squat = 155.0, 205.0
+    gym_logs = [r[0] for r in conn.execute("SELECT date FROM habit_logs WHERE habit_id = ? ORDER BY date",
+                                            (habit_id("Go to the gym"),))]
+    for i, day in enumerate(gym_logs):
+        if i % 3 == 0:
+            w = {"date": day, "kind": "cardio", "title": "Easy run", "minutes": rnd.choice([30, 35, 40]),
+                 "distance": rnd.choice([3.1, 3.5, 4.0]), "sets": []}
+        elif i % 3 == 1:
+            bench += rnd.choice([0, 2.5, 5])
+            w = {"date": day, "kind": "strength", "title": "Push day", "sets": [
+                {"exercise": "Bench press", "sets": 3, "reps": 5, "weight": bench},
+                {"exercise": "Overhead press", "sets": 3, "reps": 8, "weight": 85},
+                {"exercise": "Dips", "sets": 3, "reps": 10, "weight": 0}]}
+        else:
+            squat += rnd.choice([0, 5])
+            w = {"date": day, "kind": "strength", "title": "Legs", "sets": [
+                {"exercise": "Squat", "sets": 3, "reps": 5, "weight": squat},
+                {"exercise": "Romanian deadlift", "sets": 3, "reps": 8, "weight": 135}]}
+        fitness.save_workout(conn, w, log_routine=False)
+    fitness.set_gym_habit(conn, habit_id("Go to the gym"))
+    weight = 184.0
+    for back in range(84, -1, -3):
+        weight += rnd.uniform(-0.8, 0.5)
+        fitness.log_weight(conn, round(weight, 1), D(-back).isoformat())
+
+    # --- Meals -----------------------------------------------------------------------
+    recipes = {}
+    for name, ingredients, minutes in [
+        ("Chicken rice bowls", ["Chicken thighs", "Jasmine rice", "Broccoli", "Teriyaki sauce"], 30),
+        ("Overnight oats", ["Rolled oats", "Greek yogurt", "Blueberries", "Chia seeds"], 5),
+        ("Turkey chili", ["Ground turkey", "Kidney beans", "Diced tomatoes", "Onion", "Chili powder"], 45),
+        ("Salmon & sweet potato", ["Salmon fillets", "Sweet potatoes", "Asparagus", "Lemon"], 35),
+        ("Pasta primavera", ["Penne", "Zucchini", "Cherry tomatoes", "Parmesan"], 25),
+    ]:
+        recipes[name] = meals.save_recipe(conn, {"name": name, "ingredients": ingredients, "minutes": minutes})["id"]
+    start = meals.week_start(today.isoformat())
+    dinners = ["Chicken rice bowls", "Turkey chili", "Salmon & sweet potato", "Turkey chili", "Pasta primavera", None, "Chicken rice bowls"]
+    for i, dinner in enumerate(dinners):
+        day = (start + timedelta(days=i)).isoformat()
+        meals.save_meal(conn, {"date": day, "slot": "breakfast", "recipe_id": recipes["Overnight oats"]})
+        if dinner:
+            meals.save_meal(conn, {"date": day, "slot": "dinner", "recipe_id": recipes[dinner]})
+        else:
+            meals.save_meal(conn, {"date": day, "slot": "dinner", "title": "Dinner out with friends"})
+
+    # --- Home & admin ----------------------------------------------------------------
+    for name, cat, n, unit, last, notes in [
+        ("Change HVAC filter", "home", 3, "months", D(-95), "16x25x1, MERV 8"),
+        ("Oil change", "car", 6, "months", D(-170), "Every 5,000 miles; synthetic 0W-20"),
+        ("Rotate tires", "car", 6, "months", D(-60), ""),
+        ("Smoke detector batteries", "home", 1, "years", D(-200), "Hallway + bedroom"),
+        ("Dentist cleaning", "health", 6, "months", D(-150), "Dr. Alvarez"),
+        ("Deep clean the fridge", "home", 2, "months", D(-20), ""),
+    ]:
+        item = home.save_item(conn, {"name": name, "category": cat, "every_n": n, "every_unit": unit, "notes": notes})
+        home.mark_done(conn, item["id"], last.isoformat(), None)
+    for name, kind, when, remind, where in [
+        ("Passport", "document", D(210), 180, "Fire safe"),
+        ("Driver's license", "document", D(400), 60, "Wallet"),
+        ("Car registration", "renewal", D(18), 30, "Glove box"),
+        ("Renters insurance", "insurance", D(41), 30, "Email from Lemonade"),
+        ("Lease renewal deadline", "renewal", D(12), 21, "Parkview portal"),
+        ("Laptop warranty", "warranty", D(95), 14, "Google Drive / Receipts"),
+    ]:
+        home.save_date(conn, {"name": name, "kind": kind, "date": when.isoformat(), "remind_days": remind, "location": where})
+
+    # --- Weekly review (last week, done) ---------------------------------------------
+    last = review.monday() - timedelta(days=7)
+    review.save_review(conn, last.isoformat(), {
+        "went_well": "Hit 4 gym sessions and all my CPA study blocks. Practice scores are climbing.",
+        "improve": "Too many late nights; move reading earlier.",
+        "priorities": ["Score 80%+ on a FAR practice exam", "Send the migration plan to Priya", "Book Sintra tickets"],
+        "completed": True})
+
+    # --- Bills & savings -------------------------------------------------------------
+    planning.save_bill(conn, {"name": "Renters insurance", "amount": 168, "due_day": D(41).day, "frequency": "yearly",
+                              "start_month": D(41).month, "category": "Insurance", "autopay": True})
+    planning.save_bill(conn, {"name": "Car insurance", "amount": 118, "due_day": 22, "category": "Insurance", "autopay": True})
+    planning.save_bill(conn, {"name": "Amazon Prime", "amount": 139, "due_day": 9, "frequency": "yearly",
+                              "start_month": 2, "category": "Subscriptions", "subscription": True, "autopay": True})
+    planning.set_sub_flag(conn, "iCloud", "keep")
+    planning.set_sub_flag(conn, "Spotify", "cancel", "Use the family plan instead")
+    planning.save_savings(conn, {"name": "Emergency fund", "target": 15000, "account_id": "DEMO-SAV",
+                                 "target_date": D(200).isoformat(), "goal_id": g["save"]})
+    planning.save_savings(conn, {"name": "Lisbon trip", "target": 1800, "saved": 1250, "target_date": D(24).isoformat()})
+    planning.save_savings(conn, {"name": "CPA exam fees (REG, BAR)", "target": 900, "saved": 250, "target_date": D(150).isoformat()})

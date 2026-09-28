@@ -56,6 +56,32 @@ def set_model(body: ModelIn):
     return ai_models.choices()
 
 
+def extra_context(conn) -> dict:
+    """Schedule, people, CPA, workouts, meals and home for the AI bar (each skipped if it fails)."""
+    from ..cpa import service as cpa
+    from ..fitness import service as fitness
+    from ..home import service as home
+    from ..meals import service as meals
+    from ..people import service as people
+    from ..schedule import service as schedule
+    out = {}
+    today = date.today()
+    parts = {
+        "schedule": lambda: [b for i in range(3) for b in schedule.list_blocks(conn, (today + timedelta(days=i)).isoformat())],
+        "people": lambda: people.context_lines(conn),
+        "cpa": lambda: cpa.context_line(conn),
+        "workouts": lambda: fitness.context_line(conn),
+        "meals": lambda: meals.context_line(conn),
+        "home": lambda: home.context_line(conn),
+    }
+    for key, fn in parts.items():
+        try:
+            out[key] = fn()
+        except Exception:  # noqa: BLE001 (one module's hiccup shouldn't break the AI bar)
+            pass
+    return out
+
+
 @router.post("")
 async def run_command(body: CommandIn):
     text = body.text.strip()
@@ -74,7 +100,7 @@ async def run_command(body: CommandIn):
     with get_db() as conn:
         context = build_context(service.list_goals(conn), service.list_tasks(conn),
                                 habits.list_habits(conn), cal, shopping.list_items(conn),
-                                followups.list_followups(conn))
+                                followups.list_followups(conn), extra_context(conn))
 
     try:
         # Calling Claude takes a few seconds; run it off the main thread so the

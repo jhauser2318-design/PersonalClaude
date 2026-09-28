@@ -127,7 +127,90 @@ def collect(conn, now: datetime) -> int:
         if body:
             _add(conn, "briefing", "☀️ Your day", body, "dashboard", None, f"briefing:{today.isoformat()}", now)
 
+    # Birthdays, reach-out nudges, home upkeep, expiring documents, bills, weekly review.
+    if now.strftime("%H:%M") >= "09:00":
+        for check in (_birthdays, _reach_out, _maintenance, _important_dates, _bills):
+            try:
+                check(conn, now, today)
+            except sqlite3.OperationalError:  # that module's tables don't exist yet
+                pass
+    try:
+        _weekly_review(conn, now, today)
+    except sqlite3.OperationalError:
+        pass
+
     return conn.execute("SELECT COUNT(*) FROM notifications").fetchone()[0] - before
+
+
+def _birthdays(conn, now, today):
+    for p in conn.execute("SELECT id, name, birthday FROM people WHERE birthday IS NOT NULL").fetchall():
+        m, d = int(p["birthday"][5:7]), int(p["birthday"][8:10])
+        for ahead, text in ((0, "is today 🎂"), (7, "is in a week")):
+            day = today + timedelta(days=ahead)
+            if (day.month, day.day) == (m, d) or (not _leap(day.year) and (m, d) == (2, 29) and (day.month, day.day) == (3, 1)):
+                y = int(p["birthday"][:4])
+                age = f" (turning {day.year - y})" if y else ""
+                _add(conn, "birthday", f"🎂 {p['name']}'s birthday {text}", f"{day.strftime('%a %b %d')}{age}",
+                     "people", p["id"], f"bday:{p['id']}:{day.isoformat()}:{ahead}", now)
+
+
+def _leap(year: int) -> bool:
+    return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+
+
+def _reach_out(conn, now, today):
+    """Once a week at most per person: it's been longer than you wanted."""
+    week = (today - timedelta(days=today.weekday())).isoformat()
+    for p in conn.execute("SELECT id, name, cadence_days FROM people WHERE cadence_days > 0").fetchall():
+        last = conn.execute("SELECT MAX(date) FROM interactions WHERE person_id = ?", (p["id"],)).fetchone()[0]
+        days = (today - date.fromisoformat(last)).days if last else None
+        if days is None or days >= p["cadence_days"]:
+            body = f"Last contact {days} days ago" if days is not None else "No contact logged yet"
+            _add(conn, "people", f"👋 Reach out to {p['name']}", body, "people", p["id"], f"reach:{p['id']}:{week}", now)
+
+
+def _maintenance(conn, now, today):
+    from .modules.home.service import add_interval
+    for it in conn.execute("SELECT * FROM maintenance WHERE last_done IS NOT NULL").fetchall():
+        due = add_interval(date.fromisoformat(it["last_done"]), it["every_n"], it["every_unit"])
+        if due <= today + timedelta(days=3):
+            when = "due today" if due == today else ("overdue since " + due.strftime("%b %d") if due < today
+                                                     else "due " + due.strftime("%a %b %d"))
+            _add(conn, "home", f"🔧 {it['name']}", when[0].upper() + when[1:], "home", it["id"], f"maint:{it['id']}:{due.isoformat()}", now)
+
+
+def _important_dates(conn, now, today):
+    for d in conn.execute("SELECT * FROM important_dates WHERE done = 0").fetchall():
+        when = date.fromisoformat(d["date"])
+        left = (when - today).days
+        stage = "day" if left <= 0 else "early" if left <= d["remind_days"] else None
+        if stage:
+            body = "Expires/due today" if left == 0 else f"Expired {-left} days ago" if left < 0 else f"Expires {when.strftime('%b %d, %Y')} ({left} days)"
+            _add(conn, "home", f"📄 {d['name']}", body, "home", d["id"], f"date:{d['id']}:{d['date']}:{stage}", now)
+
+
+def _bills(conn, now, today):
+    if (get_setting(conn, "notify_bills") or "1") != "1":
+        return
+    from .modules.finances import planning  # only when there are bills to check
+    if not conn.execute("SELECT (SELECT COUNT(*) FROM fin_bills) + (SELECT COUNT(*) FROM fin_accounts)").fetchone()[0]:
+        return
+    due_day = today + timedelta(days=2)
+    for b in planning.bills_due(conn, due_day):
+        auto = " · autopay" if b["autopay"] else ""
+        _add(conn, "bill", f"💳 {b['name']} due {due_day.strftime('%a %b %d')}", f"${b['amount']:,.2f}{auto}",
+             "finances/bills", None, f"bill:{b['name']}:{b['date']}", now)
+
+
+def _weekly_review(conn, now, today):
+    if (get_setting(conn, "notify_review") or "1") != "1" or today.weekday() != 6 or now.strftime("%H:%M") < "18:00":
+        return
+    week = (today - timedelta(days=6)).isoformat()
+    row = conn.execute("SELECT completed_at FROM weekly_reviews WHERE week_start = ?", (week,)).fetchone()
+    if row and row["completed_at"]:
+        return
+    _add(conn, "review", "📝 Time for your weekly review", "10 minutes: look back at the week and pick next week's priorities",
+         "review", None, f"review:{week}", now)
 
 
 def briefing(conn, today: date) -> str:
@@ -141,6 +224,12 @@ def briefing(conn, today: date) -> str:
                    if _habit_open_today(conn, h, today))
     if routines:
         parts.append(f"{routines} routine{'s' if routines != 1 else ''} to do")
+    try:
+        blocks = conn.execute("SELECT start, title FROM schedule_blocks WHERE date = ? ORDER BY start", (t,)).fetchall()
+        if blocks:
+            parts.append(f"{len(blocks)} block{'s' if len(blocks) != 1 else ''} planned (first: {blocks[0]['start']} {blocks[0]['title']})")
+    except sqlite3.OperationalError:
+        pass
     fu = conn.execute("SELECT COUNT(*) FROM followups WHERE done = 0 AND due_date <= ?", (t,)).fetchone()[0]
     if fu:
         parts.append(f"{fu} follow-up{'s' if fu != 1 else ''} due")

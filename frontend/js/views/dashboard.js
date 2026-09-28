@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { bindGoals, bindTasks, goalGrid, taskList } from "../components.js";
 import { bindRoutines, routineList } from "../routines.js";
 import { eventTime, openEventEditor } from "./calendar.js";
+import { fmtTime, openBlockEditor } from "./schedule.js";
 import { areaStyle, areaTag, esc, fmtDateTime, ring } from "../ui.js";
 
 function greeting() {
@@ -12,8 +13,8 @@ function greeting() {
 }
 
 export async function render(view) {
-  const [d, habits, cal] = await Promise.all([
-    api.get("/dashboard"), api.get("/habits"),
+  const [d, habits, today, cal] = await Promise.all([
+    api.get("/dashboard"), api.get("/habits"), api.get("/today").catch(() => ({ plan: { blocks: [] }, heads_up: [] })),
     api.get("/calendar/events?days=1").catch(() => ({ connected: false, events: [], failed: true })),
   ]);
   const now = new Date();
@@ -22,6 +23,8 @@ export async function render(view) {
   const todays = habits.filter((h) => h.due_today);
   const routinesLeft = todays.filter((h) => !h.done_today).length;
   const allTasks = [...d.overdue_tasks, ...d.due_today, ...d.due_this_week];
+  const blocks = today.plan.blocks;
+  const nowHM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
   view.innerHTML = `
     <div class="page-head"><div>
@@ -55,7 +58,17 @@ export async function render(view) {
             ${d.overdue_tasks.length ? taskList(d.overdue_tasks) : ""}
             ${d.overdue_goals.length ? `<div style="margin-top:12px">${goalGrid(d.overdue_goals)}</div>` : ""}
           </div>` : ""}
-        <h2 class="section">Today's schedule <span class="count">${cal.events.length}</span><span class="line"></span><a href="#/calendar">Calendar →</a></h2>
+        ${today.heads_up.length ? `<div class="card heads-up">${today.heads_up.map((h) =>
+          `<a href="#/${esc(h.link)}"><span>${h.icon}</span>${esc(h.text)}</a>`).join("")}</div>` : ""}
+        <h2 class="section">Today's plan <span class="count">${blocks.filter((b) => b.done).length}/${blocks.length}</span><span class="line"></span><a href="#/schedule">Schedule →</a></h2>
+        <div id="dash-plan">${blocks.length ? `<div class="card plan-list">${blocks.map((b) => `
+            <div class="plan-row ${b.done ? "done" : ""} ${!b.done && b.start <= nowHM && nowHM < b.end ? "now" : ""}" data-block="${b.id}" style="${areaStyle(b.area)}">
+              <input type="checkbox" class="check" ${b.done ? "checked" : ""} aria-label="Mark “${esc(b.title)}” as done">
+              <span class="ev-time">${esc(fmtTime(b.start))}–${esc(fmtTime(b.end))}</span>
+              <span class="ev-title">${esc(b.title)}</span>
+            </div>`).join("")}</div>`
+          : `<div class="card empty">No time blocks planned today. <a href="#/schedule">Plan your day →</a></div>`}</div>
+        <h2 class="section">Calendar today <span class="count">${cal.events.length}</span><span class="line"></span><a href="#/calendar">Calendar →</a></h2>
         <div id="dash-schedule">${!cal.connected
           ? `<div class="card empty">${cal.failed ? "Couldn't reach Google Calendar right now." : `Google Calendar isn't connected. <a href="#/calendar">Connect it →</a>`}</div>`
           : cal.events.length
@@ -101,6 +114,16 @@ export async function render(view) {
   view.querySelector("#dash-schedule").addEventListener("click", (e) => {
     const ev = e.target.closest("[data-event-id]");
     if (ev) openEventEditor(events[ev.dataset.eventId], () => render(view));
+  });
+  const planEl = view.querySelector("#dash-plan");
+  planEl.addEventListener("change", async (e) => {
+    if (!e.target.matches(".check")) return;
+    await api.patch(`/schedule/blocks/${e.target.closest("[data-block]").dataset.block}`, { done: e.target.checked });
+    render(view);
+  });
+  planEl.addEventListener("click", (e) => {
+    const row = e.target.closest("[data-block]");
+    if (row && !e.target.matches(".check")) openBlockEditor(blocks.find((b) => b.id === Number(row.dataset.block)), () => render(view));
   });
   const overdue = view.querySelector("#dash-overdue");
   if (overdue) bindGoals(overdue);

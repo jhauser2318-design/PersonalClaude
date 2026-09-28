@@ -165,6 +165,27 @@ If Claude isn't sure what you mean (for example, two goals could match), it **as
 - **Life areas** in the sidebar (Work, Health, …) show one area's progress, goals and tasks on a single page.
 - **Settings**: switch between light, dark and system themes, and manage the example data.
 
+### Daily schedule and focus timer
+
+**Schedule** (sidebar → Plan) is your own day in time blocks: gym 6:30–7:30, deep work, CPA study 7–9pm. It stays in the app. Only important events (appointments, meetings, anything with other people, travel) go on Google Calendar, and those appear faded next to your blocks so you can plan around them.
+
+- Plan a day the way you like it, then **Save this day as a typical day** and pick weekdays (e.g. Workday = Mon–Fri). New days fill in from it automatically.
+- Tell the AI bar “Gym 6–7am tomorrow and CPA study 7–9pm” or “Plan my afternoon around my meetings”.
+- The **timer button** at the top starts a focus session (25/50/90 minutes). Link it to a routine and the time counts toward it (50 minutes = 0.83 hours of CPA study).
+
+### More pages
+
+- **CPA Exam Planner** (under Education): each section's exam date, study hours vs an even pace, hours per day still needed, practice-score trend (75 to pass), and the credit window after your first pass. Hours come from your “CPA study” routine and linked focus sessions. “Got 78% on my FAR practice exam” in the AI bar saves a score.
+- **Weekly review** (Plan): the week's numbers across the app, what went well / what to change, next week's top 3 priorities (one click makes them tasks), and an optional AI summary. A reminder pops up Sunday at 6pm.
+- **People** (Life): birthdays, when you last talked, and “reach out every N days” nudges. “Called Mom about the trip” logs it.
+- **Workouts** (Life): sets × reps × weight or cardio minutes, personal records (estimated 1-rep max), workouts per week and body weight. Logging a workout also checks off your gym routine.
+- **Meals** (Life): a week of meals and a recipe box; one click puts the week's ingredients on your shopping needs (skipping ones already there).
+- **Home & admin**: upkeep that repeats (HVAC filter, oil change) with the next due date, and important dates and documents (passport, registration, insurance) with a heads-up ahead of time.
+- **Finances → Bills**: a month calendar of bills (found from your transactions, your loans, and ones you add), a subscriptions list with the yearly cost of each and a “cancel it” list. A reminder comes 2 days before each bill.
+- **Finances → Savings**: savings goals with the monthly amount needed to hit each target date; link one to a savings account and it updates with every sync.
+
+The Dashboard now shows today's plan and a heads-up list (birthdays, bills, things due).
+
 ### Connecting Google Calendar (one time, about 10 minutes)
 
 Google requires every app that uses Google Calendar to be registered. Because this app runs only on your computer, you register it in **your own** free Google Cloud account. The **Calendar** page in the app walks you through the same steps.

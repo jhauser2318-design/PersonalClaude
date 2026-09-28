@@ -1,7 +1,8 @@
 // Life Control Center: app startup, sidebar navigation, and the command bar.
 import { api, sync } from "./api.js";
 import { icon } from "./icons.js";
-import { EXTRA_ROUTES, MODULES } from "./modules.js";
+import { AREA_PAGES, EXTRA_ROUTES, GROUPS, MODULES } from "./modules.js";
+import { setupFocus } from "./focus.js";
 import { setAreas, state } from "./state.js";
 import { esc, toast } from "./ui.js";
 import { openDraft, openMessage } from "./email-ui.js";
@@ -17,14 +18,16 @@ const view = $("#view");
 
 function buildNav() {
   const link = (href, inner, extra = "") => `<a class="nav-link ${extra}" href="${href}">${inner}</a>`;
-  const main = MODULES.filter((m) => !m.comingSoon);
-  const soon = MODULES.filter((m) => m.comingSoon);
+  const badge = (id) => ({ routines: "routine-badge", followups: "followup-badge" })[id];
+  const item = (m) => link(`#/${m.id}`, `${icon(m.icon)}${esc(m.label)}${badge(m.id) ? `<span class="nav-badge" id="${badge(m.id)}" hidden></span>` : ""}`);
   $("#nav").innerHTML = `
-    ${main.map((m) => link(`#/${m.id}`, `${icon(m.icon)}${esc(m.label)}${m.id === "routines" ? `<span class="nav-badge" id="routine-badge" hidden></span>` : ""}${m.id === "followups" ? `<span class="nav-badge" id="followup-badge" hidden></span>` : ""}`)).join("")}
+    ${GROUPS.map((g) => {
+      const items = MODULES.filter((m) => m.group === g);
+      return items.length ? `${g ? `<div class="nav-section eyebrow">${esc(g)}</div>` : ""}${items.map(item).join("")}` : "";
+    }).join("")}
     <div class="nav-section eyebrow">Life areas</div>
-    ${state.areas.map((a) => link(`#/area/${a.id}`, `<span class="dot" style="--area:${a.color}"></span>${esc(a.name)}`)).join("")}
-    ${soon.length ? `<div class="nav-section eyebrow">Coming soon</div>` : ""}
-    ${soon.map((m) => link(`#/${m.id}`, `${icon(m.icon)}${esc(m.label)}<span class="soon">Soon</span>`, "disabled")).join("")}
+    ${state.areas.map((a) => link(`#/area/${a.id}`, `<span class="dot" style="--area:${a.color}"></span>${esc(a.name)}`)
+      + (AREA_PAGES[a.id] || []).map((p) => link(`#/${p.id}`, `${icon(p.icon)}${esc(p.label)}`, "nav-sub")).join("")).join("")}
     <div class="nav-section"></div>
     ${link("#/settings", `${icon("settings")}Settings`)}
     <button class="nav-link nav-button" id="check-updates">${icon("refresh")}Check for updates</button>`;
@@ -33,7 +36,8 @@ function buildNav() {
 
 function highlightNav() {
   const hash = location.hash || "#/dashboard";
-  document.querySelectorAll(".nav-link").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === hash));
+  const base = hash.split("/").slice(0, hash.startsWith("#/area/") ? 3 : 2).join("/");
+  document.querySelectorAll(".nav-link").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === base));
 }
 
 function openMenu(open) {
@@ -52,7 +56,7 @@ async function route() {
   openMenu(false);
   try {
     if (module?.comingSoon) comingSoon.render(view, module);
-    else if (module) await module.view.render(view);
+    else if (module) await module.view.render(view, arg);
     else if (EXTRA_ROUTES[name]) await EXTRA_ROUTES[name].render(view, arg);
     else { location.hash = "#/dashboard"; return; }
   } catch (err) {
@@ -92,6 +96,12 @@ async function updateBadge() {
 // ===========================================================================
 
 const EXAMPLES = [
+  "Gym 6–7am tomorrow and CPA study 7–9pm",
+  "Plan my afternoon around my meetings",
+  "Got 78% on my FAR practice exam",
+  "Bench 3×5 at 185, then 3 sets of 10 pull-ups",
+  "Called Mom about the trip",
+  "Add Jake, friend, birthday June 3, reach out every 2 weeks",
   "Remind me to call Mom at 6pm",
   "Follow up with Sarah about the contract Friday at 10am",
   "Remind me every day at 7am to do my skincare",
@@ -102,7 +112,7 @@ const EXAMPLES = [
   "How much are my needs in total?",
   "What did Sarah say about the budget?",
   "Reply to Alex that Saturday dinner works",
-  "Schedule CPA study tomorrow 7–9pm at the library",
+  "Dentist appointment Thursday at 3pm (goes on Google Calendar)",
   "When am I free this week for a 2-hour study block?",
   "Went to the gym and did my skincare",
   "Studied CPA for 2.5 hours today",
@@ -275,6 +285,7 @@ async function start() {
   $("#menu-btn").addEventListener("click", () => openMenu(true));
   $("#scrim").addEventListener("click", () => openMenu(false));
   setupCommandBar();
+  setupFocus();
   try {
     setAreas(await api.get("/areas"));
     const status = await api.get("/command/status");

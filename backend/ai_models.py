@@ -28,13 +28,15 @@ MODEL_IDS = {m["id"] for m in MODELS}
 
 ROLES = {
     "command": {"name": "AI bar", "default": "claude-sonnet-5",
-                "what": "Adds and edits goals, tasks, routines, events, shopping items and follow-ups; answers questions."},
+                "what": "Adds and edits goals, tasks, routines, your schedule, events, shopping, follow-ups, people and workouts; answers questions."},
     "email": {"name": "Email assistant", "default": "claude-sonnet-5",
               "what": "Searches and reads your Gmail, answers questions, drafts replies."},
     "finance": {"name": "Finance assistant", "default": "claude-sonnet-5",
                 "what": "Answers money questions and writes the Finances reports."},
     "categorize": {"name": "Transaction sorting", "default": "claude-haiku-4-5",
                    "what": "Sorts new bank and card transactions into categories after each sync."},
+    "review": {"name": "Weekly review", "default": "claude-sonnet-5",
+               "what": "Writes the summary of your week on the Weekly review page (only when you click it)."},
 }
 
 

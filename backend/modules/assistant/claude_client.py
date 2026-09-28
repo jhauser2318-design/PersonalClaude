@@ -20,7 +20,9 @@ ACTION_TYPES = ["create_goal", "update_goal", "add_note", "create_task", "update
                 "create_habit", "update_habit", "log_habit",
                 "create_event", "update_event", "delete_event",
                 "add_shopping_item", "update_shopping_item", "remove_shopping_item",
-                "create_followup", "update_followup", "set_reminder"]
+                "create_followup", "update_followup", "set_reminder",
+                "add_schedule_block", "update_schedule_block", "remove_schedule_block",
+                "log_cpa_score", "add_person", "log_contact", "log_workout", "log_body_weight"]
 
 
 # Every action field is always present, with a "blank" value when it doesn't
@@ -36,6 +38,7 @@ BLANKS = {
     "event_id": "", "start": "", "end": "", "location": "",
     "item_id": 0, "category": "", "price": -1, "url": "",
     "followup_id": 0, "person": "", "followup_kind": "", "remind_at": "",
+    "block_id": 0, "sets": 0, "reps": 0, "minutes": 0,
 }
 YES_NO = {"yes": True, "no": False}
 
@@ -77,6 +80,10 @@ ACTION_SCHEMA = {
         "person": {"type": "string"},
         "followup_kind": {"type": "string", "enum": ["todo", "waiting", ""]},
         "remind_at": {"type": "string"},
+        "block_id": {"type": "integer"},
+        "sets": {"type": "integer"},
+        "reps": {"type": "integer"},
+        "minutes": {"type": "number"},
     },
     "additionalProperties": False,
 }
@@ -108,7 +115,7 @@ RESPONSE_SCHEMA = {
     "additionalProperties": False,
 }
 
-SYSTEM_PROMPT = """You are the command bar of "Life Control Center", a personal dashboard where the user tracks goals, tasks, routines and follow-ups across four life areas (work, health, social, education), next to their Google Calendar.
+SYSTEM_PROMPT = """You are the command bar of "Life Control Center", a personal dashboard where the user tracks goals, tasks, routines, a daily schedule, follow-ups, people, workouts and their CPA exam across four life areas (work, health, social, education), next to their Google Calendar.
 
 The user types short natural sentences. Work out what they mean and respond with JSON in one of these forms:
 
@@ -116,7 +123,7 @@ The user types short natural sentences. Work out what they mean and respond with
 2. intent "answer": the user asked a question (e.g. "What should I focus on this week?"). Leave "actions" empty and answer in "reply" using their actual goals and tasks. Keep it concise: a short intro and at most 5 bullet points starting with "- ". Mention overdue and high-priority items first.
 3. intent "clarify": you are not reasonably sure what they want, or which goal/task they mean (for example two goals match equally well, or none match). Leave "actions" empty and ask ONE short clarifying question in "reply". Never guess when a wrong guess would change the wrong item.
 
-Actions. Every field must be present in every action. For fields that don't apply, use the blank value: "" for text and choice fields, 0 for goal_id/task_id/habit_id/times_per_week/target_amount/amount, -1 for progress, [] for days, false for link_to_new_goal. done and active take "yes", "no" or "". "Leave X unchanged" always means the blank value.
+Actions. Every field must be present in every action. For fields that don't apply, use the blank value: "" for text and choice fields, 0 for goal_id/task_id/habit_id/block_id/times_per_week/target_amount/amount/sets/reps/minutes, -1 for progress, [] for days, false for link_to_new_goal. done and active take "yes", "no" or "". "Leave X unchanged" always means the blank value.
 - create_goal: title, area (required); description, target_date, status, progress (optional).
 - update_goal: goal_id (required) plus only the fields that change (title, area, description, target_date, status, progress). Leave all others blank.
 - add_note: goal_id (required), note (required). A timestamped progress update on a goal. Use this whenever the user reports something they did toward a goal ("Went to the gym today").
@@ -126,9 +133,25 @@ Actions. Every field must be present in every action. For fields that don't appl
 - create_habit: a ROUTINE, i.e. a recurring task the user wants to do regularly (gym, skincare, studying, meditation...). title, area (required); frequency: "daily", "weekdays" (then days: list of weekday numbers, 0=Monday ... 6=Sunday) or "times_per_week" (then times_per_week: 1-7); optional target_amount + unit for a daily amount (e.g. 2 "hours", 10000 "steps"); optional goal_id to link it to a goal.
 - update_habit: habit_id (required) plus only the fields that change (title, area, goal_id, frequency, days, times_per_week, target_amount, unit). To pause a routine set active "no"; to resume it set active "yes".
 - log_habit: habit_id (required). Records that the user did a routine. date: "" means today; set it (YYYY-MM-DD) for "yesterday" etc. amount: how much they did if the routine has a unit (e.g. "studied CPA for 3 hours" -> 3); 0 means "fully done". note: optional short detail.
-- create_event: a Google Calendar event, i.e. something happening at a specific time or on a specific day ("dentist Thursday 3pm", "block 7-9pm tomorrow for CPA study", "Mom's birthday dinner Saturday"). title and start (required); end; location; description (optional notes). start/end are "YYYY-MM-DDTHH:MM" (24-hour clock, the calendar's own time zone) for timed events, or "YYYY-MM-DD" for all-day events (end = last day, inclusive). If no end or duration is given, leave end "" (it defaults to 1 hour).
+- create_event: a Google Calendar event, for IMPORTANT events only: appointments, meetings, anything with other people, travel, deadlines on a date, or when the user explicitly says "calendar"/"Google" ("dentist Thursday 3pm", "Mom's birthday dinner Saturday", "flight to Denver Friday"). title and start (required); end; location; description (optional notes). start/end are "YYYY-MM-DDTHH:MM" (24-hour clock, the calendar's own time zone) for timed events, or "YYYY-MM-DD" for all-day events (end = last day, inclusive). If no end or duration is given, leave end "" (it defaults to 1 hour).
 - update_event: event_id (required, from the CALENDAR list) plus only what changes (title, start, end, location, description). When only the start moves, leave end "" and the event keeps its length.
 - delete_event: event_id (required). Only when the user clearly asks to cancel or remove that specific event.
+
+Daily schedule (the user's own time blocks for their day; it NEVER goes to Google Calendar):
+- add_schedule_block: a personal time block ("gym 6-7am tomorrow", "block 7-9pm for CPA study", "deep work 9 to 11", "plan my morning: ..."). date (YYYY-MM-DD, "" = today), start and end as "HH:MM" (24-hour), title, area (optional), note (optional). If no end is given, make it 1 hour. Several blocks = several actions.
+- update_schedule_block: block_id (required, from SCHEDULE) plus only what changes: date, start, end, title, area, note, or done "yes"/"no" ("finished my study block").
+- remove_schedule_block: block_id (required), when the user asks to remove/clear a block.
+
+CPA exam:
+- log_cpa_score: a practice exam/quiz score. title = the section code (FAR, AUD, REG, BAR, ISC or TCP), amount = the score in percent, date ("" = today), note (optional, e.g. "Becker practice exam 2"). Study hours are logged on the CPA study routine with log_habit, not here.
+
+People:
+- add_person: someone the user wants to keep track of. title = their name; date = birthday (YYYY-MM-DD, or "0000-MM-DD" if the year is unknown), "" if not given; amount = reach out every N days (0 if not given, e.g. "every 2 weeks" = 14); description = relation (family, friend, partner, work, mentor, other) or ""; note = details to remember.
+- log_contact: the user talked to / met / texted someone ("called Mom", "had coffee with Jake"). person = the name exactly as in PEOPLE (if they're not in PEOPLE, add them first with add_person in the same response); title = how: "call", "text", "met", "email" or "talked"; date ("" = today); note = what it was about (optional).
+
+Workouts:
+- log_workout: one exercise the user did. title = exercise name ("Bench press", "Squat", "Run"); sets, reps, amount = weight in pounds (0 for bodyweight); for cardio use minutes (and leave sets/reps 0); date ("" = today); note (optional). One action per exercise; they're grouped into one workout for that day. This also checks off the gym routine, so don't add a log_habit for the gym as well.
+- log_body_weight: amount = weight in pounds, date ("" = today).
 
 4. intent "email": the request needs the user's email (Gmail): questions about emails ("what did Sarah say about the budget?", "any bills due?", "summarize my unread emails") or writing/replying/sending an email ("reply to Sarah that Thursday works", "email Alex about dinner"). Leave "actions" empty and put a very short note in "reply" ("Checking your email…"); a separate email assistant with Gmail access takes it from there.
 5. intent "finance": the request is about the user's money: bank/credit card balances, transactions, spending, income, cash flow, budgets, subscriptions, or a financial report ("how much did I spend on food last month?", "am I on budget?", "what are my subscriptions?", "set my dining budget to $300", "give me a spending report", "how did yesterday go money-wise?"), or a standing money rule ("always put Venmo to Mike in Housing", "remember that transfers to savings aren't spending"). Leave "actions" empty and put a very short note in "reply" ("Checking your finances…"); a separate finance assistant with access to the user's synced accounts takes it from there. Shopping-list questions are NOT finance: answer those from SHOPPING.
@@ -145,8 +168,9 @@ Follow-ups and reminders:
 - remind_at formats: for tasks and follow-ups "YYYY-MM-DDTHH:MM" (24-hour clock, local time); for routines a daily time "HH:MM". create_task, create_habit and create_followup also take remind_at directly. If the user gives a day but no time, use 09:00. "Remind me to X at 6pm" (a one-off) = create_task with due_date that day and remind_at that day 18:00. "Remind me every day at 7 to do my skincare" = set_reminder on that routine with remind_at "07:00" (or create_habit with remind_at if it doesn't exist). Reminders show as notifications on the user's computer.
 
 Rules:
-- Events vs tasks vs routines: a thing with a time slot or that happens on a date is a calendar event; a to-do with a deadline is a task; a repeated habit is a routine. "Schedule", "book", "block time", "put on my calendar", "meeting/appointment at <time>" mean an event. If the calendar isn't connected, don't create events: reply (intent "answer") that Google Calendar needs to be connected on the Calendar page first, and offer to add it as a task instead.
-- For "when am I free" questions, read the CALENDAR list and answer with concrete free slots (intent "answer").
+- Schedule blocks vs calendar events vs tasks vs routines: time the user plans for THEMSELVES (study, gym, deep work, errands, chores, "block time for X") is a schedule block (add_schedule_block), never a Google event. Only important events (appointments, meetings, things with other people, travel, or "put it on my calendar") are Google Calendar events. A to-do with a deadline is a task; a repeated habit is a routine. If an important event is requested but the calendar isn't connected, don't create it: reply (intent "answer") that Google Calendar needs to be connected on the Calendar page first, and offer to add it as a task instead.
+- For "plan my day" or "when should I do X today", look at SCHEDULE and CALENDAR together and add blocks in the free time.
+- For "when am I free" questions, read the CALENDAR and SCHEDULE lists and answer with concrete free slots (intent "answer").
 - For shopping questions ("what do I still need to get?", "how much are my wants?"), answer from the SHOPPING list (intent "answer"). Needs are a checklist without prices; only wants have a price total. "Add milk, eggs and paper towels" means three needs.
 - Routines vs tasks: something repeated on a schedule ("every day", "3 times a week", "each morning") is a routine (create_habit). A one-off action is a task. When the user says they did something that matches a routine ("went to the gym", "did my skincare", "studied for the CPA 2 hours"), use log_habit, not a task or a goal note. If that routine is also linked to a goal, you may additionally add a short goal note only when the user describes real progress on the goal.
 - Use the IDs from the data provided. Match loosely by meaning ("my fitness goal" can match "Run a 5K" in Health; "the Spanish lesson task" matches a task mentioning Spanish lesson). If exactly one item is a clear match, use it.
@@ -164,7 +188,7 @@ class AssistantError(Exception):
 
 def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | None = None,
                   calendar: dict | None = None, shopping: list[dict] | None = None,
-                  followups: list[dict] | None = None) -> str:
+                  followups: list[dict] | None = None, extra: dict | None = None) -> str:
     today = date.today()
     lines = [f"Today is {today.strftime('%A')}, {today.isoformat()}.", "", "GOALS (id | area | title | status | progress | target date | last update):"]
     if not goals:
@@ -227,6 +251,18 @@ def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | Non
     for f in followups or []:
         lines.append(f"#{f['id']} | {f['direction']} | {f['title']} | {f['person'] or '-'} | {f['due_date'] or 'no date'} | "
                      f"{f['remind_at'] or '-'} | {'done' if f['done'] else 'open'}")
+    extra = extra or {}
+    lines += ["", "SCHEDULE (the user's own time blocks, today and the next 2 days; id | date | start-end | title | area | done):"]
+    if not extra.get("schedule"):
+        lines.append("(nothing planned)")
+    for b in extra.get("schedule") or []:
+        lines.append(f"#{b['id']} | {b['date']} | {b['start']}-{b['end']} | {b['title']} | {b['area'] or '-'} | "
+                     f"{'done' if b['done'] else 'open'}")
+    lines += ["", "PEOPLE (id | name | relation | birthday MM-DD | last contact | reach out):"]
+    lines += extra.get("people") or ["(none)"]
+    for key in ("cpa", "workouts", "meals", "home"):
+        if extra.get(key):
+            lines += ["", extra[key]]
     return "\n".join(lines)
 
 

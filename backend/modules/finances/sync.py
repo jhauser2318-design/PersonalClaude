@@ -69,6 +69,8 @@ def _sync() -> dict:
         result["categorize_error"] = str(e)
     with get_db() as conn:
         result["alerts"] = budget_alerts(conn)
+        from . import planning
+        planning.sync_goal_progress(conn)
     return result
 
 

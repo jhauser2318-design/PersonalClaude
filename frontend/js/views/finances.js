@@ -3,10 +3,11 @@
 import { api } from "../api.js";
 import { icon } from "../icons.js";
 import { esc, fmtDate, openDialog, showError, toast, todayISO } from "../ui.js";
+import { renderBills, renderSavings } from "./finance-planning.js";
 
 const TABS = [
   ["overview", "Overview"], ["daily", "Daily"], ["transactions", "Transactions"], ["budgets", "Budgets"],
-  ["loans", "Loans"], ["rules", "Rules"], ["reports", "Reports & questions"],
+  ["bills", "Bills"], ["savings", "Savings"], ["loans", "Loans"], ["rules", "Rules"], ["reports", "Reports & questions"],
 ];
 const ui = { tab: "overview", month: null, day: null, filters: { period: "", account_id: "", category: "", search: "" },
   chat: [], ruleDraft: "", rulesChanged: false };
@@ -54,7 +55,8 @@ const catChip = (c) => `<span class="fin-cat" style="--c:${catColor(c)}"><span c
 // Page
 // ===========================================================================
 
-export async function render(view) {
+export async function render(view, arg) {
+  if (arg && TABS.some(([id]) => id === arg)) ui.tab = arg;
   clearTimeout(pollTimer);
   const status = await api.get("/finances/status");
   if (!status.connected) return renderSetup(view, status);
@@ -123,7 +125,7 @@ async function renderTab(root) {
   const box = root.querySelector("#fin-tab");
   box.innerHTML = `<div class="card empty">Loading…</div>`;
   const fn = { overview: renderOverview, daily: renderDaily, transactions: renderTransactions, budgets: renderBudgets,
-    loans: renderLoans, rules: renderRules, reports: renderReports }[ui.tab];
+    loans: renderLoans, rules: renderRules, reports: renderReports, bills: renderBills, savings: renderSavings }[ui.tab];
   try { await fn(box, root); } catch (err) { box.innerHTML = `<div class="card empty">${esc(err.message)}</div>`; }
 }
 

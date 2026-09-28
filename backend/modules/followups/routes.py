@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
-from ... import notify
+from ... import notify, push
 from ...database import get_db
 from ..goals.service import ValidationError
 from . import service
@@ -42,6 +42,7 @@ class ReminderIn(BaseModel):
 class SettingsIn(BaseModel):
     notify_briefing: str | None = None
     notify_budget: bool | None = None
+    notify_desktop: bool | None = None
 
 
 def _run(fn, *args, real: bool = False, **kwargs):
@@ -163,4 +164,79 @@ async def test():
         await run_in_threadpool(show)
     except (RuntimeError, OSError) as e:
         raise HTTPException(status_code=400, detail=f"The test notification couldn't be shown: {e}")
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Phone notifications (Web Push; see backend/push.py)
+# ---------------------------------------------------------------------------
+
+class SubscribeIn(BaseModel):
+    subscription: dict
+    label: str = "Phone"
+
+
+class EndpointIn(BaseModel):
+    endpoint: str | None = None
+
+
+def _push_run(fn, *args):
+    with get_db(real=True) as conn:  # phones and keys always live in your real data
+        return fn(conn, *args)
+
+
+@router.get("/push/status")
+def push_status():
+    def work(conn):
+        return {"key": push.public_key(conn), "devices": push.devices(conn),
+                "enabled": service.get_settings(conn)["notify_enabled"] == "1"}
+    data = _push_run(work)
+    data["background"] = background_status()
+    return data
+
+
+@router.post("/push/subscribe")
+async def push_subscribe(body: SubscribeIn):
+    try:
+        device = _push_run(push.subscribe, body.subscription, body.label)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # Reminders are sent by the background check on the PC: make sure it's on.
+    _run(service.save_settings, {"notify_enabled": "1"}, real=True)
+    try:
+        installed = notify.task_installed()  # None: not Windows
+        if installed is False:
+            await run_in_threadpool(notify.install_task)
+        background = None if installed is None else True
+    except (RuntimeError, OSError):
+        background = False
+    sent = await run_in_threadpool(_send_test, body.subscription.get("endpoint"))
+    return {"device": device, "background": background, "test_sent": sent}
+
+
+def _send_test(endpoint: str | None = None) -> int:
+    msg = [{"title": "🔔 Phone notifications are on", "body": "Reminders will show up here, even when the app is closed.",
+            "url": "/#/followups", "tag": "test", "urgent": True}]
+    with get_db(real=True) as conn:
+        return push.send_all(conn, msg, endpoint=endpoint)
+
+
+@router.post("/push/test")
+async def push_test(body: EndpointIn):
+    sent = await run_in_threadpool(_send_test, body.endpoint)
+    if not sent:
+        raise HTTPException(status_code=400, detail="The test didn't go through. Check that your PC is online, "
+                                                    "then turn phone notifications off and on again on the phone.")
+    return {"sent": sent}
+
+
+@router.post("/push/unsubscribe")
+def push_unsubscribe(body: EndpointIn):
+    _push_run(push.unsubscribe, body.endpoint)
+    return {"ok": True}
+
+
+@router.delete("/push/devices/{device_id}")
+def push_forget(device_id: int):
+    _push_run(push.unsubscribe, None, device_id)
     return {"ok": True}

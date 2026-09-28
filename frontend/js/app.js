@@ -3,6 +3,7 @@ import { api, sync } from "./api.js";
 import { icon } from "./icons.js";
 import { AREA_PAGES, EXTRA_ROUTES, GROUPS, MODULES } from "./modules.js";
 import { setupFocus } from "./focus.js";
+import { deviceState, enablePush, isStandalone, setupPush } from "./push.js";
 import { setAreas, state } from "./state.js";
 import { esc, toast } from "./ui.js";
 import { openDraft, openMessage } from "./email-ui.js";
@@ -287,6 +288,7 @@ async function start() {
   $("#scrim").addEventListener("click", () => openMenu(false));
   setupCommandBar();
   setupFocus();
+  setupPush();
   try {
     setAreas(await api.get("/areas"));
     const status = await api.get("/command/status");
@@ -305,6 +307,29 @@ async function start() {
   updateBadge();
   announceUpdate();
   keepAlive();
+  offerPhoneNotifications();
+}
+
+// On the phone's Home Screen app: offer notifications once (until turned on or dismissed).
+async function offerPhoneNotifications() {
+  if (!remoteDevice || !isStandalone()) return;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem("lcc-push-offer") === "no"; } catch (e) { /* private mode */ }
+  if (dismissed || (await deviceState()) !== "off" || Notification.permission !== "default") return;
+  const bar = document.createElement("div");
+  bar.className = "notice push-offer";
+  bar.innerHTML = `<span>🔔 Get your reminders on this phone, even when the app is closed?</span>
+    <span class="btn-row"><button class="btn small primary" data-yes>Turn on</button><button class="btn small" data-no>Not now</button></span>`;
+  $("#key-notice").after(bar);
+  bar.querySelector("[data-no]").onclick = () => { try { localStorage.setItem("lcc-push-offer", "no"); } catch (e) { /* */ } bar.remove(); };
+  bar.querySelector("[data-yes]").onclick = async (e) => {
+    e.currentTarget.disabled = true;
+    try {
+      await enablePush();
+      bar.remove();
+      toast("Phone notifications are on. A test is on its way.", 5000);
+    } catch (err) { toast(err.message, 8000); e.currentTarget.disabled = false; }
+  };
 }
 
 // A small "Demo" tag in the top bar while demo mode is on (click it to go to Settings).

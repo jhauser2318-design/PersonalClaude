@@ -1220,3 +1220,9 @@ input[type=range] { width: 100%; accent-color: var(--area, var(--accent)); }
 .job-row .fin-li-sub .dot { display: inline-block; }
 .job-done summary { cursor: pointer; color: var(--text-3); font: 600 12px var(--font-mono); text-transform: uppercase; letter-spacing: .08em; margin-top: 10px; }
 .job-done .fin-li-title { text-decoration: line-through; color: var(--text-3); }
+
+/* Notifications: phones and this computer */
+.fu-channels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.fu-channel .fin-list li { padding: 7px 0; }
+.push-offer { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+@media (max-width: 700px) { .fu-channels { grid-template-columns: 1fr; } }

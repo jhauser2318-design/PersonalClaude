@@ -305,9 +305,17 @@ def _applescript(text: str) -> str:
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def deliver(conn, now: datetime, sender=None) -> int:
-    """Show undelivered notifications. Returns how many were shown."""
+URGENT = ("task", "followup", "routine")  # timed reminders: pop up right away on the phone too
+
+
+def _phone_url(link: str) -> str:
+    return f"/#/{link or 'dashboard'}"
+
+
+def deliver(conn, now: datetime, sender=None, pusher=None) -> int:
+    """Show undelivered notifications on this computer and send them to phones. Returns how many."""
     sender = sender or send_toast
+    desktop = (get_setting(conn, "notify_desktop") or "1") == "1"
     rows = conn.execute("SELECT * FROM notifications WHERE delivered_at IS NULL ORDER BY id").fetchall()
     stamp = _now_iso(now)
     fresh = [r for r in rows if datetime.fromisoformat(r["created_at"]) >= now - MAX_AGE]
@@ -318,11 +326,32 @@ def deliver(conn, now: datetime, sender=None) -> int:
         return 0
     if len(fresh) > 4:  # don't flood the screen: one summary instead
         titles = ", ".join(r["title"] for r in fresh[:4])
-        sender(f"{len(fresh)} reminders", f"{titles}…", "followups", False)
-        return 1
-    for r in fresh:
-        sender(r["title"], r["body"], r["link"], r["kind"] in ("task", "followup", "routine"))
-    return len(fresh)
+        shown = [{"title": f"{len(fresh)} reminders", "body": f"{titles}…", "link": "followups", "urgent": False,
+                  "tag": "summary"}]
+    else:
+        shown = [{"title": r["title"], "body": r["body"], "link": r["link"], "urgent": r["kind"] in URGENT,
+                  "tag": f"{r['kind']}-{r['ref_id'] or r['id']}"} for r in fresh]
+    if desktop:
+        for m in shown:
+            try:
+                sender(m["title"], m["body"], m["link"], m["urgent"])
+            except Exception as e:  # noqa: BLE001 (still send to phones)
+                log.warning("Desktop notification failed: %s", e)
+    _to_phones(conn, shown, pusher)
+    return len(shown)
+
+
+def _to_phones(conn, shown: list[dict], pusher=None) -> int:
+    """Send to every phone that turned on notifications (Web Push)."""
+    try:
+        from . import push
+        unread = conn.execute("SELECT COUNT(*) FROM notifications WHERE read_at IS NULL").fetchone()[0]
+        messages = [{"title": m["title"], "body": m["body"][:180], "url": _phone_url(m["link"]), "tag": m["tag"],
+                     "urgent": m["urgent"], "badge": unread} for m in shown]
+        return push.send_all(conn, messages, pusher)
+    except Exception as e:  # noqa: BLE001 (no internet, cryptography missing...): desktop still works
+        log.warning("Phone notifications failed: %s", e)
+        return 0
 
 
 # ---------------------------------------------------------------------------

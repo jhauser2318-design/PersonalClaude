@@ -2,6 +2,7 @@
 // every upcoming reminder, and the desktop-notification switch.
 import { api } from "../api.js";
 import { icon } from "../icons.js";
+import { deviceState, disablePush, enablePush, testPush } from "../push.js";
 import { dueState, esc, fmtDate, fmtDateTime, openDialog, showError, toast } from "../ui.js";
 
 const KIND_LABEL = { task: "Task", routine: "Routine", followup: "Follow-up" };
@@ -48,24 +49,51 @@ function column(kind, items) {
     </section>`;
 }
 
-function notifyCard(n) {
+function notifyCard(n, ph, dev) {
   const bg = n.background;
   const on = n.settings.notify_enabled === "1";
+  const desktop = n.settings.notify_desktop !== "0";
+  const remote = document.documentElement.classList.contains("is-remote");
   let status;
   if (!bg.supported) status = `<span class="status-chip"><span class="dot" style="--c:var(--text-3)"></span>Background reminders need the Windows app</span>`;
-  else if (on && bg.installed) status = `<span class="status-chip"><span class="dot" style="--c:var(--success)"></span><b>On</b> · works even when the app is closed</span>`;
+  else if (on && bg.installed) status = `<span class="status-chip"><span class="dot" style="--c:var(--success)"></span><b>On</b> · checked every minute by your PC</span>`;
   else if (on) status = `<span class="status-chip"><span class="dot" style="--c:var(--warning)"></span>On, but the background check is missing</span>`;
   else status = `<span class="status-chip"><span class="dot" style="--c:var(--text-3)"></span><b>Off</b></span>`;
   const times = ["", "06:00", "06:30", "07:00", "07:30", "08:00", "08:30", "09:00", "10:00"];
+  const phoneHelp = {
+    "home-screen": `To get notifications on this iPhone, open the app from its <b>Home Screen icon</b> (in Safari tap Share → <b>Add to Home Screen</b>), then come back to this page there. Needs iOS 16.4 or newer.`,
+    unsupported: "This browser can't receive notifications. On an iPhone, use the Home Screen app (iOS 16.4 or newer).",
+    denied: "Notifications are blocked for this app. Allow them in the iPhone's <b>Settings → Notifications → Life CC</b>, then reload.",
+  }[dev];
   return `
     <section class="card fu-notify">
       <div class="fu-notify-head">
-        <div><h2>${icon("bell")} Desktop notifications</h2>
-          <p>Reminders pop up on this computer at the right time, even when the app window is closed (while the computer is on).</p>
+        <div><h2>${icon("bell")} Notifications</h2>
+          <p>Reminders, follow-ups, birthdays, bills and the morning briefing pop up at the right time, on this computer and on your phone, even when the app is closed. Your PC sends them, so it needs to be on (not asleep).</p>
           <div class="status-chips">${status}</div></div>
-        <div class="btn-row">
-          ${on && bg.installed ? `<button class="btn" id="n-test">Send a test</button><button class="btn" id="n-off">Turn off</button>`
+        ${remote ? "" : `<div class="btn-row">
+          ${on && bg.installed ? `<button class="btn" id="n-test">Test on this computer</button><button class="btn" id="n-off">Turn off</button>`
             : `<button class="btn primary" id="n-on" ${bg.supported ? "" : "disabled"}>${icon("bell")} Turn on notifications</button>`}
+        </div>`}
+      </div>
+      <div class="fu-channels">
+        <div class="fu-channel">
+          <div class="eyebrow">📱 Phones</div>
+          ${remote ? (phoneHelp ? `<p class="muted small" style="margin:6px 0">${phoneHelp}</p>`
+            : dev === "on" ? `<div class="btn-row" style="margin:8px 0"><span class="status-chip"><span class="dot" style="--c:var(--success)"></span><b>On</b> for this phone</span>
+                <button class="btn small" id="p-test">Send a test</button><button class="btn small" id="p-off">Turn off here</button></div>`
+            : `<div class="btn-row" style="margin:8px 0"><button class="btn primary small" id="p-on">${icon("bell")} Turn on for this phone</button></div>`)
+            : `<p class="muted small" style="margin:6px 0">To add a phone: open the app from its Home Screen icon on the phone, go to <b>Follow-ups</b>, and tap <b>Turn on for this phone</b>.</p>`}
+          ${ph.devices.length ? `<ul class="fin-list">${ph.devices.map((d) => `
+            <li><div><div class="fin-li-title">${esc(d.label)}</div>
+              <div class="fin-li-sub">${d.last_error ? `⚠ ${esc(d.last_error)}` : d.last_ok ? `last delivered ${esc(fmtDateTime(d.last_ok))}` : `added ${esc(fmtDateTime(d.created_at))}`}</div></div>
+              <button class="icon-btn danger" data-forget="${d.id}" aria-label="Stop notifications to ${esc(d.label)}">${icon("x")}</button></li>`).join("")}</ul>`
+            : `<p class="muted small" style="margin:0">No phones yet.</p>`}
+        </div>
+        <div class="fu-channel">
+          <div class="eyebrow">💻 This computer</div>
+          <label class="fin-check" style="margin-top:8px"><input type="checkbox" id="n-desktop" ${desktop ? "checked" : ""}>
+            <span>Show notifications on the PC too (turn off if you only want them on your phone)</span></label>
         </div>
       </div>
       <div class="fu-settings">
@@ -78,8 +106,9 @@ function notifyCard(n) {
 }
 
 export async function render(view) {
-  const [{ items, summary }, reminders, notes] = await Promise.all([
+  const [{ items, summary }, reminders, notes, ph, dev] = await Promise.all([
     api.get("/followups"), api.get("/reminders"), api.get("/notifications"),
+    api.get("/push/status").catch(() => ({ devices: [] })), deviceState().catch(() => "unsupported"),
   ]);
   const open = items.filter((f) => !f.done);
   const done = items.filter((f) => f.done);
@@ -96,7 +125,7 @@ export async function render(view) {
       </div></div>
       <button class="btn primary" id="fu-add">${icon("plus")} New follow-up</button></div>
     <p class="sub" style="margin:-8px 0 18px;color:var(--text-3)">Tip: tell the AI bar “Follow up with Sarah about the contract Friday at 10” or “Remind me every day at 7am to do my skincare”.</p>
-    ${notifyCard(notes)}
+    ${notifyCard(notes, ph, dev)}
     <div class="shop-grid" style="margin-top:16px">
       ${column("todo", open.filter((f) => f.direction === "todo"))}
       ${column("waiting", open.filter((f) => f.direction === "waiting"))}
@@ -172,6 +201,35 @@ export async function render(view) {
     await api.post("/notifications/disable");
     toast("Notifications turned off");
     refresh();
+  });
+  root.querySelector("#n-desktop").addEventListener("change", async (e) => {
+    await api.patch("/notifications/settings", { notify_desktop: e.target.checked });
+    toast(e.target.checked ? "Showing on this computer too" : "Phones only");
+  });
+  root.querySelector("#p-on")?.addEventListener("click", async (e) => {
+    busy(e.currentTarget, "Turning on…");
+    try {
+      const r = await enablePush();
+      toast(r.test_sent ? "On! A test notification is on its way." : "On. (The test didn't arrive yet; try “Send a test”.)", 6000);
+    } catch (err) { toast(err.message, 9000); }
+    refresh();
+  });
+  root.querySelector("#p-test")?.addEventListener("click", async (e) => {
+    busy(e.currentTarget, "Sending…");
+    try { await testPush(); toast("Sent. It should arrive in a few seconds."); } catch (err) { toast(err.message, 9000); }
+    refresh();
+  });
+  root.querySelector("#p-off")?.addEventListener("click", async () => {
+    await disablePush();
+    toast("Phone notifications off for this phone");
+    refresh();
+  });
+  root.querySelectorAll("[data-forget]").forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm("Stop sending notifications to this phone?")) return;
+      await api.del(`/push/devices/${b.dataset.forget}`);
+      refresh();
+    };
   });
   root.querySelector("#n-read")?.addEventListener("click", async () => {
     await api.post("/notifications/read");

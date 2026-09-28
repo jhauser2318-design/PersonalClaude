@@ -259,6 +259,16 @@ How it works: turning notifications on adds a small Windows scheduled task, "Lif
 
 The **Follow-ups** page lists "I need to…" and "Waiting on…" items, every upcoming reminder, and recent notifications.
 
+#### Notifications on your iPhone
+
+Your reminders can also pop up on your iPhone's lock screen, like any other app, even when the app is closed. Needs iOS 16.4 or newer and phone access (Tailscale) already set up.
+
+1. On the iPhone, open the app from its **Home Screen icon** (not a Safari tab). If you haven't added it yet: in Safari tap **Share → Add to Home Screen**.
+2. Tap **Turn on** on the banner that appears, or go to **Follow-ups → Turn on for this phone**, and tap **Allow**.
+3. A test notification arrives within a few seconds. Tap any notification to open the app on the right page. The app icon shows a badge with how many are unread.
+
+Your PC sends them (through Apple's push service), so they arrive whenever the PC is on and awake; the phone doesn't need Tailscale connected to receive them. To get them only on the phone, untick **Show notifications on the PC too**. To stop, tap **Turn off here** on the phone, or remove it from the list on the PC.
+
 ### Using the app on your iPhone (Tailscale)
 
 Your PC stays the "home base": the app and all your data live there, and your phone opens it through **Tailscale**, a free, private, encrypted link between your own devices. Nothing is opened to the internet. Everything you do on either device shows up on the other within a few seconds.

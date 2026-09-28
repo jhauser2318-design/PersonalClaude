@@ -199,6 +199,9 @@ def _access_token(force_refresh: bool = False) -> str:
         if status != 200 or not data or "access_token" not in data:
             if data and data.get("error") in ("invalid_grant", "unauthorized_client"):
                 TOKEN_FILE.unlink(missing_ok=True)
+                global last_error
+                last_error = ("Google disconnected the app. It does this every 7 days while your Google app "
+                              "is in Testing mode, or if access was removed. Click Connect to sign in again.")
                 raise NotConnected("Google Calendar access expired or was removed. "
                                    "Reconnect it on the Calendar page.")
             raise CalendarError(f"Couldn't refresh Google access ({_google_message(data) or status}).")

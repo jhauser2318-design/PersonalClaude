@@ -115,13 +115,9 @@ export async function render(view) {
 
 // ---------- Setup (not connected yet) ----------
 function renderSetup(view, status) {
-  view.innerHTML = `
-    <div class="page-head"><div>
-      <div class="eyebrow">Google Calendar · not connected</div>
-      <h1>Calendar</h1>
-      <p class="sub">Connect your Google Calendar once, and your events show up here. The AI bar can then schedule, move and cancel events for you.</p>
-    </div></div>
-    ${status.last_error ? `<div class="notice" style="margin:0 0 16px">${esc(status.last_error)}</div>` : ""}
+  const ready = status.client_configured;
+  const connectButton = `<button class="btn primary" data-connect ${ready ? "" : "disabled"}>${icon("calendar")} ${ready ? "Connect" : "Connect Google Calendar"}</button>`;
+  const guide = `
     <div class="settings">
       <section class="card">
         <h2>1 · Create your Google connection (one time, ~10 minutes)</h2>
@@ -130,7 +126,7 @@ function renderSetup(view, status) {
           <li>Open <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a>, signed in as the Google account whose calendar you want. Create a project named <b>Life Control Center</b>.</li>
           <li>Search for <b>Google Calendar API</b> and click <b>Enable</b>.</li>
           <li>Open <b>Google Auth Platform</b> (called “OAuth consent screen” in some versions) → <b>Get started</b>. App name: Life Control Center. Audience: <b>External</b>. Add your email where asked.</li>
-          <li>Under <b>Audience</b>, click <b>Publish app</b>. (Left in “Testing”, Google makes you reconnect every 7 days.)</li>
+          <li>Under <b>Audience</b>, either click <b>Publish app</b> (fill in the <b>Branding</b> page first), or, if Google won't let you publish, add your email under <b>Test users</b>. With a test user, Google disconnects the app every 7 days, and you reconnect with one click here.</li>
           <li>Under <b>Clients</b>, click <b>Create client</b>. Type: <b>Web application</b>. Under <b>Authorized redirect URIs</b>, add exactly:
             <div class="copy-row"><code id="redirect">${esc(status.redirect_uri)}</code><button class="btn small" id="copy">Copy</button></div></li>
           <li>Click <b>Create</b>, then <b>Download JSON</b>.</li>
@@ -138,15 +134,33 @@ function renderSetup(view, status) {
       </section>
       <section class="card">
         <h2>2 · Upload the file you downloaded</h2>
-        <p>${status.client_configured ? "✅ Client file saved. You can upload a new one to replace it." : "It's named something like <code>client_secret_….json</code>, in your Downloads folder."}</p>
+        <p>${ready ? "✅ Client file saved. You can upload a new one to replace it." : "It's named something like <code>client_secret_….json</code>, in your Downloads folder."}</p>
         <input type="file" id="client-file" accept=".json,application/json">
       </section>
       <section class="card">
         <h2>3 · Connect</h2>
-        <p>You'll sign in to Google and approve access to your calendar events. Google may warn that it “hasn't verified this app”. That's expected, because it's your own app: click <b>Advanced</b> → <b>Go to Life Control Center</b>.</p>
-        <button class="btn primary" id="connect" ${status.client_configured ? "" : "disabled"}>${icon("calendar")} Connect Google Calendar</button>
+        <p>You'll sign in to Google and approve access to your calendar events. Google may warn that it “hasn't verified this app”. That's expected, because it's your own app: click <b>Continue</b> (or <b>Advanced</b> → <b>Go to Life Control Center</b>).</p>
+        ${connectButton}
       </section>
     </div>`;
+  view.innerHTML = `
+    <div class="page-head"><div>
+      <div class="eyebrow">Google Calendar · not connected</div>
+      <h1>Calendar</h1>
+      <p class="sub">${ready ? "Your Google connection is set up. Sign in to show your events here."
+        : "Connect your Google Calendar once, and your events show up here. The AI bar can then schedule, move and cancel events for you."}</p>
+    </div></div>
+    ${status.last_error ? `<div class="notice" style="margin:0 0 16px">${esc(status.last_error)}</div>` : ""}
+    ${ready ? `
+      <section class="card reconnect">
+        <div>
+          <h2>Connect Google Calendar</h2>
+          <p>One click: sign in to Google and allow access. If your Google app is in “Testing” mode, Google asks you to do this again every 7 days.</p>
+        </div>
+        ${connectButton}
+      </section>
+      <details class="setup-details"><summary>Setup steps (already done) · replace the Google file</summary>${guide}</details>`
+      : guide}`;
   view.querySelector("#copy").onclick = async () => {
     try { await navigator.clipboard.writeText(status.redirect_uri); toast("Copied"); }
     catch (e) { toast("Select the address and copy it with Ctrl+C"); }
@@ -158,14 +172,14 @@ function renderSetup(view, status) {
       await api.post("/calendar/client", { text: await file.text() });
       toast("Client file saved");
       render(view);
-    } catch (err) { toast(err.message); }
+    } catch (err) { toast(err.message, 8000); }
   };
-  view.querySelector("#connect").onclick = async () => {
+  view.querySelectorAll("[data-connect]").forEach((b) => b.onclick = async () => {
     try {
       const { url } = await api.get("/calendar/connect");
       location.href = url; // Google's sign-in page; it sends you back here afterwards
-    } catch (err) { toast(err.message); }
-  };
+    } catch (err) { toast(err.message, 8000); }
+  });
 }
 
 // ---------- Add / edit an event ----------

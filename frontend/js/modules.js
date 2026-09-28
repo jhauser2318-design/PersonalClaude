@@ -5,6 +5,7 @@
 import * as area from "./views/area.js";
 import * as dashboard from "./views/dashboard.js";
 import * as goals from "./views/goals.js";
+import * as routines from "./views/routines.js";
 import * as settings from "./views/settings.js";
 import * as tasks from "./views/tasks.js";
 
@@ -12,6 +13,7 @@ export const MODULES = [
   { id: "dashboard", label: "Dashboard", icon: "home", view: dashboard },
   { id: "goals", label: "Goals", icon: "target", view: goals },
   { id: "tasks", label: "Tasks", icon: "check", view: tasks },
+  { id: "routines", label: "Routines", icon: "repeat", view: routines },
 
   // Future phases (shown as "Coming soon").
   { id: "calendar", label: "Calendar", icon: "calendar", comingSoon: true,

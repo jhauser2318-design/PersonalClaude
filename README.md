@@ -7,7 +7,8 @@ A personal dashboard that runs on your own computer and opens in your web browse
 - Four life areas, each with its own color: **Work**, **Health**, **Social**, **Education**.
 - **Goals** with a status, a progress %, an optional target date, and a timestamped history of updates.
 - **Tasks**: small action steps with a priority and an optional due date. A task can belong to a goal.
-- **Dashboard**: progress for each area, what's due today and this week, overdue items, and recent updates.
+- **Routines**: recurring tasks such as the gym, skincare or CPA study. Each one runs every day, on chosen days, or N times a week, with an optional daily target (e.g. 2 hours). The app tracks streaks, best streaks, 30-day completion and a 12-week history grid.
+- **Dashboard**: a "command center" with a progress ring for each area, today's routines, what's due today and this week, overdue items, and an activity feed.
 - **Live command bar**: type normal sentences and Claude (Anthropic's AI) makes the changes for you. Every change can be undone.
 
 The sidebar already has spots for **Calendar, Finances, Email, Follow-ups and Shopping list**. They say "Coming soon" and will be built in later phases.
@@ -115,6 +116,11 @@ The bar at the top is always visible. Press **/** anywhere to jump to it. Type a
 | `Mark the Spanish lesson task as done` | Ticks off the matching task |
 | `What should I focus on this week?` | Gives you a short, prioritized answer (no changes made) |
 | `I'm 60% done with the Q4 plan` | Sets that goal's progress to 60% |
+| `Went to the gym and did my skincare` | Checks off both routines for today |
+| `Studied CPA for 2.5 hours` | Logs 2.5 hours on the CPA study routine |
+| `I did my skincare yesterday too` | Logs the routine for yesterday |
+| `Set up a routine to do FAR practice questions Mon, Wed and Fri` | Creates a new routine on those days |
+| `Pause the gym routine` | Pauses it (streaks aren't counted while paused) |
 
 After each command you'll see a short confirmation of exactly what changed, with an **Undo** button.
 If Claude isn't sure what you mean (for example, two goals could match), it **asks you a question instead of guessing**. Type your answer in the bar and it will remember what you were talking about.
@@ -122,7 +128,8 @@ If Claude isn't sure what you mean (for example, two goals could match), it **as
 ### Clicking instead of typing
 
 - **Goals** page: **New goal**, or click any goal card to open it. There you can drag the progress slider, add notes, add or tick off its tasks, **Edit**, or **Delete**.
-- **Tasks** page: tick a checkbox to complete a task, or click a task to edit it. The pencil and bin icons edit and delete.
+- **Tasks** page: tick a checkbox to complete a task, or click a task to edit it. The pencil and bin icons edit and delete. Today's routines are listed at the top.
+- **Routines** page: click the big circle to check a routine off for today (click again to undo). Routines with a daily target have a box to log amounts (e.g. 1.5 hours now, 1 more hour later). The ⏸ button pauses a routine and the pencil edits or deletes it. The grid shows the last 12 weeks: bright = done, faded = partly done, red = missed.
 - **Life areas** in the sidebar (Work, Health, …) show one area's progress, goals and tasks on a single page.
 - **Settings**: switch between light, dark and system themes, and manage the example data.
 

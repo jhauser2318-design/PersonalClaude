@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from ... import config
 from ...database import get_db
 from ..goals import service
+from ..habits import service as habits
 from ..goals.service import ValidationError
 from . import actions
 from .claude_client import AssistantError, ask_claude, build_context
@@ -35,7 +36,8 @@ async def run_command(body: CommandIn):
         raise HTTPException(status_code=400, detail="Type something first")
 
     with get_db() as conn:
-        context = build_context(service.list_goals(conn), service.list_tasks(conn))
+        context = build_context(service.list_goals(conn), service.list_tasks(conn),
+                                habits.list_habits(conn))
 
     try:
         # Calling Claude takes a few seconds; run it off the main thread so the

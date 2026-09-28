@@ -113,3 +113,19 @@ export function showError(container, err) {
   }
   p.textContent = err.message || String(err);
 }
+
+// A glowing circular progress gauge (used for life areas).
+export function ring(pct, areaId, size = 64, label = `${pct}%`) {
+  const stroke = 6;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const off = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
+  return `<div class="ring" style="${areaStyle(areaId)};width:${size}px;height:${size}px" role="img" aria-label="${pct}%">
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle class="track" cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke-width="${stroke}"/>
+      <circle class="value" cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke-width="${stroke}"
+        stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}" ${pct <= 0 ? "opacity=\"0\"" : ""}/>
+    </svg>
+    <div class="ring-label">${esc(label)}</div>
+  </div>`;
+}

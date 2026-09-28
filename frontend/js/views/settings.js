@@ -12,9 +12,9 @@ export async function render(view) {
     <div class="settings">
       <section class="card">
         <h2>Appearance</h2>
-        <p>“System” follows your computer's light/dark setting.</p>
+        <p>Dark is the default command-center look. “System” follows your computer's light/dark setting.</p>
         <div class="segmented" id="theme">
-          ${["system", "light", "dark"].map((t) => `<button data-theme="${t}" class="${t === theme ? "active" : ""}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}
+          ${["dark", "light", "system"].map((t) => `<button data-theme="${t}" class="${t === theme ? "active" : ""}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}
         </div>
       </section>
       <section class="card">

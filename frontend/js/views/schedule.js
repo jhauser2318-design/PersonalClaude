@@ -1,5 +1,5 @@
 // Daily schedule: your own time blocks for the day (study, gym, deep work…).
-// These stay in the app; only important events go to Google Calendar, and
+// These stay in the app; only what you explicitly ask for goes to Google Calendar, and
 // those are shown here faded, next to your blocks, so you can plan around them.
 import { api } from "../api.js";
 import { startFocus } from "../focus.js";
@@ -238,7 +238,7 @@ export function openBlockEditor(b = {}, onChange = () => state.refresh()) {
           <input type="text" name="notes" value="${esc(b.notes || "")}" placeholder="e.g. FAR chapter 6, library"></label>
         ${isNew ? "" : `<label class="field" style="flex-direction:row;align-items:center;gap:8px">
           <input type="checkbox" name="done" ${b.done ? "checked" : ""}> <span>Done</span></label>`}
-        <p class="muted small" style="margin:0">Time blocks stay in this app. For appointments or meetings with other people, add a Google Calendar event on the Calendar page.</p>
+        <p class="muted small" style="margin:0">Time blocks stay in this app. Nothing here goes to Google Calendar. To put something on it, use the Calendar page or say “…on my calendar” in the AI bar.</p>
       </form>`,
     foot: `
       ${isNew ? "" : `<button class="btn danger" data-delete>${icon("trash")} Delete</button>`}

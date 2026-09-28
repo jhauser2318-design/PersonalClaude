@@ -112,7 +112,7 @@ const EXAMPLES = [
   "How much are my needs in total?",
   "What did Sarah say about the budget?",
   "Reply to Alex that Saturday dinner works",
-  "Dentist appointment Thursday at 3pm (goes on Google Calendar)",
+  "Put the dentist Thursday at 3pm on my calendar",
   "When am I free this week for a 2-hour study block?",
   "Went to the gym and did my skincare",
   "Studied CPA for 2.5 hours today",

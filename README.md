@@ -125,11 +125,12 @@ The bar at the top is always visible. Press **/** anywhere to jump to it. Type a
 | `I did my skincare yesterday too` | Logs the routine for yesterday |
 | `Set up a routine to do FAR practice questions Mon, Wed and Fri` | Creates a new routine on those days |
 | `Pause the gym routine` | Pauses it (streaks aren't counted while paused) |
-| `Schedule CPA study tomorrow 7–9pm at the library` | Adds an event to your Google Calendar |
+| `CPA study tomorrow 7–9pm at the library` | Adds a time block to your Schedule (not Google Calendar) |
+| `Put the dentist Thursday at 3pm on my calendar` | Adds an event to your Google Calendar (only when you say "calendar") |
 | `Move my dentist appointment to Thursday at 3pm` | Moves the event (it keeps its length) |
 | `Cancel the team standup on Friday` | Removes that event from your calendar |
 | `When am I free this week for a 2-hour study block?` | Lists free slots from your calendar (no changes made) |
-| `Block Saturday morning for FAR practice and log 1 hour of CPA study` | Does both in one go |
+| `Block Saturday morning for FAR practice and log 1 hour of CPA study` | Adds a Schedule block and logs the routine, in one go |
 | `Add AirPods Pro to my wants, $249, for the gym` | Adds it under Wants with the price and a short description |
 | `Add this to my needs: https://store.com/desk-lamp` | Adds it from the link, reading the name and price from the page when the store allows it |
 | `Move the headphones to needs and change the price to $299` | Updates the item |
@@ -167,7 +168,7 @@ If Claude isn't sure what you mean (for example, two goals could match), it **as
 
 ### Daily schedule and focus timer
 
-**Schedule** (sidebar → Plan) is your own day in time blocks: gym 6:30–7:30, deep work, CPA study 7–9pm. It stays in the app. Only important events (appointments, meetings, anything with other people, travel) go on Google Calendar, and those appear faded next to your blocks so you can plan around them.
+**Schedule** (sidebar → Plan) is your own day in time blocks: gym 6:30–7:30, deep work, CPA study 7–9pm. It stays in the app. Nothing goes on Google Calendar unless you explicitly ask (“put the dentist Thursday 3pm **on my calendar**”). Your Google events appear faded next to your blocks so you can plan around them.
 
 - Plan a day the way you like it, then **Save this day as a typical day** and pick weekdays (e.g. Workday = Mon–Fri). New days fill in from it automatically.
 - Tell the AI bar “Gym 6–7am tomorrow and CPA study 7–9pm” or “Plan my afternoon around my meetings”.

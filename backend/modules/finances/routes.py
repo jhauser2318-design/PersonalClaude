@@ -86,7 +86,10 @@ async def connect(body: TokenIn):
 
 @router.post("/disconnect")
 def disconnect(body: DisconnectIn):
-    simplefin.disconnect()
+    try:
+        simplefin.disconnect()
+    except simplefin.FinanceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if body.delete_data:
         with get_db() as conn:
             for table in ("fin_transactions", "fin_accounts", "fin_merchants", "fin_budgets"):

@@ -30,6 +30,13 @@ export async function renderPhone(box) {
   const data = await api.get("/remote/status");
   const refresh = () => renderPhone(box);
 
+  if (data.demo) {
+    // Demo mode: don't show account names, the PC's address or devices on screen.
+    box.innerHTML = `<h2>${icon("link")} Phone &amp; devices</h2>
+      <p>Hidden while demo mode is on, so your account details stay private. Turn demo mode off to see this.</p>`;
+    return;
+  }
+
   if (data.remote) {
     // On the phone itself: just devices and the home-screen tip.
     box.innerHTML = `

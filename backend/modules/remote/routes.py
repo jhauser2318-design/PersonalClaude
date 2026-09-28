@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
-from ...database import get_db
+from ...database import demo_on, get_db
 from ..goals.service import ValidationError
 from . import auth, host
 
@@ -26,7 +26,7 @@ def _pc_only(request: Request):
 
 def _run(fn, *args):
     try:
-        with get_db() as conn:
+        with get_db(real=True) as conn:
             return fn(conn, *args)
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -37,7 +37,7 @@ def _run(fn, *args):
 @router.get("/auth/status")
 def auth_status(request: Request):
     remote = auth.is_remote(request.headers)
-    with get_db() as conn:
+    with get_db(real=True) as conn:
         signed_in = (not remote) or auth.session(conn, request.cookies.get(auth.COOKIE)) is not None
         return {"remote": remote, "signed_in": signed_in, "has_passcode": auth.has_passcode(conn)}
 
@@ -62,12 +62,13 @@ def logout(request: Request, response: Response):
 @router.get("/remote/status")
 async def remote_status(request: Request):
     remote = auth.is_remote(request.headers)
-    with get_db() as conn:
+    with get_db(real=True) as conn:
         me = auth.session(conn, request.cookies.get(auth.COOKIE)) if remote else None
         data = {"remote": remote, "this_device": me and me["id"], "has_passcode": auth.has_passcode(conn),
                 "devices": auth.list_devices(conn)}
     data["background"] = host.background_status()
     data["tailscale"] = None if remote else await run_in_threadpool(host.tailscale_status)
+    data["demo"] = demo_on()  # the page hides account details while demo mode is on
     return data
 
 
@@ -91,7 +92,7 @@ async def set_background(body: ToggleIn, request: Request):
 @router.post("/remote/tailscale/on")
 async def tailscale_on(request: Request):
     _pc_only(request)
-    with get_db() as conn:
+    with get_db(real=True) as conn:
         if not auth.has_passcode(conn):
             raise HTTPException(status_code=400, detail="Set a passcode first (step 3), so only you can open the app.")
     try:

@@ -22,6 +22,7 @@ import urllib.parse
 import urllib.request
 
 from ... import config
+from ...database import demo_on
 
 CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events"
 GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
@@ -89,6 +90,12 @@ def http_request(method: str, url: str, *, params=None, form=None, body=None, to
 # ---------------------------------------------------------------------------
 
 def load_client() -> dict | None:
+    if demo_on():
+        return {"client_id": "demo", "client_secret": "demo"}
+    return _load_client_file()
+
+
+def _load_client_file() -> dict | None:
     try:
         data = json.loads(CLIENT_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -101,6 +108,8 @@ def load_client() -> dict | None:
 
 
 def save_client(text: str) -> dict:
+    if demo_on():
+        raise CalendarError("Setting up Google isn't available in demo mode. Turn demo mode off in Settings first.")
     try:
         data = json.loads(text)
     except ValueError:
@@ -126,6 +135,8 @@ def _b64url(raw: bytes) -> str:
 
 
 def authorization_url(return_to: str = "calendar") -> str:
+    if demo_on():
+        raise CalendarError("Connecting Google isn't available in demo mode. Turn demo mode off in Settings first.")
     client = load_client()
     if not client:
         raise CalendarError("Upload your Google client file first (step 1 on the Calendar page).")
@@ -185,10 +196,14 @@ def _load_token() -> dict | None:
 
 
 def is_connected() -> bool:
+    if demo_on():
+        return True  # demo mode: a built-in sample calendar and inbox (backend/demo)
     return bool(load_client() and _load_token())
 
 
 def granted_scopes() -> set[str]:
+    if demo_on():
+        return set(SCOPES)
     token = _load_token()
     return set((token or {}).get("scope", CALENDAR_SCOPE).split()) if token else set()
 
@@ -199,6 +214,8 @@ def has_gmail() -> bool:
 
 
 def disconnect() -> None:
+    if demo_on():
+        raise CalendarError("Disconnecting Google isn't available in demo mode. Turn demo mode off in Settings first.")
     token = _load_token()
     if token:
         try:
@@ -242,6 +259,11 @@ def _google_message(data) -> str | None:
 
 def authed_request(method: str, url: str, *, params=None, body=None):
     """Call any Google API with your saved sign-in. Returns (status, json)."""
+    if demo_on():
+        # Demo mode: a built-in sample calendar and inbox. Nothing reaches Google,
+        # and "sent" emails go nowhere.
+        from ...demo import fake_google
+        return fake_google.handle(method, url, params=params, body=body)
     status, data = http_request(method, url, params=params, body=body, token=_access_token())
     if status == 401:  # token expired early: refresh once and retry
         status, data = http_request(method, url, params=params, body=body,

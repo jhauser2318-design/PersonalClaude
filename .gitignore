@@ -51,3 +51,6 @@ data/notifier.log
 
 # Background-mode switch (phone access)
 data/host.json
+
+# Demo mode switch (the sample database itself is covered by data/*.db)
+data/demo.json

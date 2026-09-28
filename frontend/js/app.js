@@ -287,11 +287,29 @@ async function start() {
     return;
   }
   buildNav();
+  showDemoBadge();
   window.addEventListener("hashchange", route);
   route();
   updateBadge();
   announceUpdate();
   keepAlive();
+}
+
+// A small "Demo" tag in the top bar while demo mode is on (click it to go to Settings).
+async function showDemoBadge() {
+  try {
+    const d = await api.get("/demo");
+    document.documentElement.classList.toggle("is-demo", d.on);
+    if (d.on && !$("#demo-badge")) {
+      const a = document.createElement("a");
+      a.id = "demo-badge";
+      a.className = "demo-badge";
+      a.href = "#/settings";
+      a.title = "Showing sample data. Click to turn demo mode off in Settings.";
+      a.textContent = "Demo";
+      $(".topbar").appendChild(a);
+    }
+  } catch (e) { /* not important */ }
 }
 
 // Is it safe to redraw the page right now (nothing being typed or edited)?
@@ -310,12 +328,18 @@ function quiet() {
 function keepAlive() {
   let failures = 0;
   let loadedVersion; // the app version this window was loaded from
+  let loadedDemo; // whether demo mode was on when this window loaded
   let lastPing = 0;
   const ping = async () => {
     lastPing = Date.now();
     try {
       const r = await api.post("/app/ping");
       failures = 0;
+      if (loadedDemo === undefined) loadedDemo = r.demo;
+      else if (r.demo !== undefined && r.demo !== loadedDemo) {
+        location.reload(); // demo mode was switched (maybe on another device): show the other data
+        return;
+      }
       if (loadedVersion === undefined) loadedVersion = r.version;
       else if (r.version !== loadedVersion) {
         location.reload(); // the app restarted on a new version: show the new screens

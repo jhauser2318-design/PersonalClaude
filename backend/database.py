@@ -25,18 +25,36 @@ def register_schema(sql: str) -> None:
     _schemas.append(sql)
 
 
-def connect() -> sqlite3.Connection:
-    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DATABASE_PATH)
+# Demo mode (Settings → Demo mode) swaps in a separate database full of sample
+# data, so you can show the app without showing your own information. Your
+# real database is never touched while it's on. A few things always use the
+# real database: phone sign-in, notification settings and AI model choices.
+DEMO_PATH = DATABASE_PATH.parent / "demo.db"
+DEMO_FLAG = DATABASE_PATH.parent / "demo.json"
+
+
+def demo_on() -> bool:
+    return DEMO_FLAG.exists()
+
+
+def active_path():
+    return DEMO_PATH if demo_on() else DATABASE_PATH
+
+
+def connect(real: bool = False, path=None) -> sqlite3.Connection:
+    path = path or (DATABASE_PATH if real else active_path())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
 @contextmanager
-def get_db():
-    """Open a connection, commit if everything worked, roll back if not."""
-    conn = connect()
+def get_db(real: bool = False, path=None):
+    """Open a connection, commit if everything worked, roll back if not.
+    real=True always uses your real database, even in demo mode."""
+    conn = connect(real, path)
     try:
         yield conn
         changed = conn.total_changes
@@ -50,8 +68,9 @@ def get_db():
         conn.close()
 
 
-def init_db() -> None:
-    with get_db() as conn:
+def init_db(path=None) -> None:
+    """Create any missing tables (in the real database unless `path` is given)."""
+    with get_db(real=path is None, path=path) as conn:
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS app_settings (

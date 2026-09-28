@@ -236,15 +236,18 @@ def deliver(conn, now: datetime, sender=None) -> int:
 
 def run_once(now: datetime | None = None, sender=None) -> dict:
     now = now or datetime.now()
-    if not config.DATABASE_PATH.exists():
+    if not config.DATABASE_PATH.exists():  # always your real data, even while demo mode is on
         return {"skipped": "no database yet"}
-    conn = connect()
+    conn = connect(real=True)
     try:
         if get_setting(conn, "notify_enabled") != "1":
             return {"skipped": "notifications are off"}
         created = collect(conn, now)
         conn.commit()
-        shown = deliver(conn, now, sender)
+        from .database import demo_on
+        # While demo mode is on, hold your real reminders (they'd show your own
+        # information on screen); they appear once demo mode is turned off.
+        shown = 0 if demo_on() else deliver(conn, now, sender)
     except sqlite3.OperationalError as e:  # e.g. tables not created yet (app never started since the update)
         return {"skipped": str(e)}
     finally:
@@ -255,9 +258,10 @@ def run_once(now: datetime | None = None, sender=None) -> dict:
 
 def morning_finance_sync(now: datetime) -> bool:
     """Once each morning, refresh bank data so budget alerts don't wait for you to open the app."""
-    if now.hour < 6 or not (ROOT / "data" / "simplefin.json").exists():
+    from .database import demo_on
+    if now.hour < 6 or demo_on() or not (ROOT / "data" / "simplefin.json").exists():
         return False
-    conn = connect()
+    conn = connect(real=True)
     try:
         last = get_setting(conn, "fin_last_sync") or ""
         tried = get_setting(conn, "fin_auto_sync_day") or ""

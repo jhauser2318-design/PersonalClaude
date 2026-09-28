@@ -792,6 +792,12 @@ a.btn { text-decoration: none; color: inherit; }
   .loan-whatif { grid-template-columns: 1fr; }
 }
 
+/* ---------- Demo mode ---------- */
+.demo-card.on { border-color: color-mix(in srgb, var(--warning) 45%, transparent); box-shadow: 0 0 24px var(--warning-soft); }
+.demo-badge { flex: none; font: 700 10.5px/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; text-decoration: none;
+  color: var(--warning); border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent); background: var(--warning-soft);
+  border-radius: 99px; padding: 6px 10px; }
+
 /* ---------- AI models (Settings) ---------- */
 .ai-roles { display: grid; gap: 2px; margin: 4px 0 10px; }
 .ai-role { display: grid; grid-template-columns: 1fr 290px; gap: 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }

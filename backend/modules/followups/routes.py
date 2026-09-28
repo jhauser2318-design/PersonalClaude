@@ -44,9 +44,9 @@ class SettingsIn(BaseModel):
     notify_budget: bool | None = None
 
 
-def _run(fn, *args, **kwargs):
+def _run(fn, *args, real: bool = False, **kwargs):
     try:
-        with get_db() as conn:
+        with get_db(real=real) as conn:
             return fn(conn, *args, **kwargs)
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -104,9 +104,10 @@ def set_reminder(kind: str, ref_id: int, body: ReminderIn):
 @router.get("/notifications")
 def notifications():
     def work(conn):
-        return {"items": service.list_notifications(conn), "settings": service.get_settings(conn),
-                "unread": service.unread_count(conn)}
+        return {"items": service.list_notifications(conn), "unread": service.unread_count(conn)}
     data = _run(work)
+    # Notification settings always belong to your real data (the reminder check reads them there).
+    data["settings"] = _run(service.get_settings, real=True)
     data["background"] = background_status()
     return data
 
@@ -127,7 +128,7 @@ def mark_read():
 
 @router.patch("/notifications/settings")
 def save_settings(body: SettingsIn):
-    return _run(service.save_settings, body.model_dump(exclude_none=True))
+    return _run(service.save_settings, body.model_dump(exclude_none=True), real=True)
 
 
 @router.post("/notifications/enable")
@@ -136,14 +137,14 @@ async def enable():
         await run_in_threadpool(notify.install_task)
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    _run(service.save_settings, {"notify_enabled": "1"})
+    _run(service.save_settings, {"notify_enabled": "1"}, real=True)
     return await test()
 
 
 @router.post("/notifications/disable")
 async def disable():
     await run_in_threadpool(notify.remove_task)
-    _run(service.save_settings, {"notify_enabled": "0"})
+    _run(service.save_settings, {"notify_enabled": "0"}, real=True)
     return {"ok": True}
 
 
@@ -151,10 +152,10 @@ async def disable():
 async def test():
     title, body = "🔔 Notifications are on", "Reminders will show up here, even when the app is closed."
     _run(service.add_notification, "test", title, body, "followups",
-         dedupe=f"test:{datetime.now().isoformat(timespec='seconds')}")
+         dedupe=f"test:{datetime.now().isoformat(timespec='seconds')}", real=True)
 
     def show():
-        with get_db() as conn:  # mark it delivered, then show it
+        with get_db(real=True) as conn:  # mark it delivered, then show it
             conn.execute("UPDATE notifications SET delivered_at = ? WHERE kind = 'test' AND delivered_at IS NULL",
                          (datetime.now().isoformat(timespec="seconds"),))
         notify.send_toast(title, body, "followups")

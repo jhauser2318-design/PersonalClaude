@@ -22,6 +22,7 @@ import urllib.parse
 import urllib.request
 
 from ... import config
+from ...database import demo_on
 
 DATA_FILE = config.PROJECT_ROOT / "data" / "simplefin.json"
 
@@ -59,7 +60,7 @@ def http_request(method: str, url: str, *, auth: str | None = None, timeout: int
 # ---------------------------------------------------------------------------
 
 def is_connected() -> bool:
-    return DATA_FILE.exists()
+    return demo_on() or DATA_FILE.exists()  # demo mode shows sample accounts
 
 
 def _access_url() -> str:
@@ -90,6 +91,8 @@ def decode_setup_token(token: str) -> str:
 
 def claim(token: str) -> None:
     """Trade a Setup Token for an Access URL and save it."""
+    if demo_on():
+        raise FinanceError("Connecting a bank isn't available in demo mode. Turn demo mode off in Settings first.")
     claim_url = decode_setup_token(token)
     status, body = http_request("POST", claim_url)
     if status == 403:
@@ -102,6 +105,8 @@ def claim(token: str) -> None:
 
 
 def disconnect() -> None:
+    if demo_on():
+        raise FinanceError("Disconnecting isn't available in demo mode. Turn demo mode off in Settings first.")
     DATA_FILE.unlink(missing_ok=True)
 
 
@@ -126,6 +131,8 @@ def fetch_accounts(start: int, end: int | None = None) -> dict:
 
     Returns {"accounts": [...], "messages": [text shown to the user]}.
     """
+    if demo_on():
+        raise FinanceError("Syncing is paused in demo mode.")
     base, auth = _split_credentials(_access_url())
     params = {"start-date": str(int(start)), "pending": "1"}
     if end:

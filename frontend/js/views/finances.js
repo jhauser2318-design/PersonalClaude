@@ -5,9 +5,11 @@ import { icon } from "../icons.js";
 import { esc, fmtDate, openDialog, showError, toast, todayISO } from "../ui.js";
 
 const TABS = [
-  ["overview", "Overview"], ["transactions", "Transactions"], ["budgets", "Budgets"], ["reports", "Reports & questions"],
+  ["overview", "Overview"], ["daily", "Daily"], ["transactions", "Transactions"], ["budgets", "Budgets"],
+  ["rules", "Rules"], ["reports", "Reports & questions"],
 ];
-const ui = { tab: "overview", month: null, filters: { period: "", account_id: "", category: "", search: "" }, chat: [] };
+const ui = { tab: "overview", month: null, day: null, filters: { period: "", account_id: "", category: "", search: "" },
+  chat: [], ruleDraft: "", rulesChanged: false };
 let pollTimer;
 
 const money = (n, cents = true) => (n ?? 0).toLocaleString(undefined, {
@@ -120,7 +122,8 @@ function poll(view) {
 async function renderTab(root) {
   const box = root.querySelector("#fin-tab");
   box.innerHTML = `<div class="card empty">Loading…</div>`;
-  const fn = { overview: renderOverview, transactions: renderTransactions, budgets: renderBudgets, reports: renderReports }[ui.tab];
+  const fn = { overview: renderOverview, daily: renderDaily, transactions: renderTransactions, budgets: renderBudgets,
+    rules: renderRules, reports: renderReports }[ui.tab];
   try { await fn(box, root); } catch (err) { box.innerHTML = `<div class="card empty">${esc(err.message)}</div>`; }
 }
 
@@ -405,10 +408,16 @@ function openTxEditor(tx, categories, onChange) {
           <input type="text" name="note" value="${esc(tx.note || "")}" placeholder="e.g. Split with Sam"></label>
         ${tx.category === "Transfer" ? `<p class="fin-fine">Transfers are money moving between your own accounts (like paying a card). They don't count as income or spending.</p>` : ""}
       </form>`,
-    foot: `<div class="right"><button class="btn" data-close>Cancel</button>
+    foot: `<button class="btn" data-make-rule>${icon("sparkle")} Make a rule…</button>
+      <div class="right"><button class="btn" data-close>Cancel</button>
       <button class="btn primary" type="submit" form="tx-form">Save</button></div>`,
   });
   const form = dlg.querySelector("form");
+  dlg.querySelector("[data-make-rule]").addEventListener("click", () => {
+    ui.ruleDraft = `Transactions from “${tx.merchant}” (bank description like “${tx.description}”) are ${form.category.value}.`;
+    dlg.close();
+    document.querySelector('.fin-tabs [data-tab="rules"]')?.click();
+  });
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const changed = form.category.value !== tx.category;
@@ -471,6 +480,193 @@ function openDisconnect(root) {
     toast("Disconnected");
     render(root.parentElement);
   };
+}
+
+// ===========================================================================
+// Daily: a day's cash in and out (yesterday by default)
+// ===========================================================================
+
+const dayLabel = (iso, opts = { weekday: "long", month: "short", day: "numeric" }) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, opts);
+};
+function shiftDay(iso, by) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const t = new Date(y, m - 1, d + by);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+}
+
+async function renderDaily(box, root) {
+  const yesterday = shiftDay(todayISO(), -1);
+  ui.day ||= yesterday;
+  const [d, cats] = await Promise.all([api.get(`/finances/day?date=${ui.day}`), api.get("/finances/categories")]);
+  const vsAvg = d.avg_daily_spending ? Math.round(100 * (d.spending - d.avg_daily_spending) / d.avg_daily_spending) : null;
+  const mtd = d.month_to_date;
+  const byId = Object.fromEntries(d.transactions.map((t) => [t.id, t]));
+
+  box.innerHTML = `
+    <div class="fin-month">
+      <button class="icon-btn" data-day="-1" aria-label="Previous day" ${d.first_date && ui.day <= d.first_date ? "disabled" : ""}>‹</button>
+      <b>${esc(dayLabel(ui.day))}</b>
+      <button class="icon-btn" data-day="1" aria-label="Next day" ${ui.day >= todayISO() ? "disabled" : ""}>›</button>
+      ${ui.day !== yesterday ? `<button class="btn small" data-yesterday>Yesterday</button>` : `<span class="muted small">yesterday</span>`}
+      <button class="btn small primary" id="day-explain" style="margin-left:auto">${icon("sparkle")} Explain this day</button>
+    </div>
+    <div class="fin-kpis">
+      ${kpi("Money in", money(d.income), "var(--success)", d.income_items.length ? d.income_items.map((t) => t.merchant).slice(0, 2).join(", ") : "no income this day")}
+      ${kpi("Money out", money(d.spending), "var(--accent)", vsAvg == null ? "spending after refunds"
+        : `${vsAvg >= 0 ? "▲" : "▼"} ${Math.abs(vsAvg)}% vs a normal day (${money(d.avg_daily_spending, false)})`)}
+      ${kpi("Net for the day", signed(d.net), d.net >= 0 ? "var(--success)" : "var(--danger)",
+        !d.count ? "no transactions this day" : d.net >= 0 ? "came out ahead" : "spent more than came in")}
+      ${kpi("Month so far", signed(mtd.net), mtd.net >= 0 ? "var(--accent-2)" : "var(--danger)", `${money(mtd.income, false)} in · ${money(mtd.spending, false)} out · day ${mtd.days}`)}
+    </div>
+    ${d.cash ? `<div class="fin-cashline">Cash in checking &amp; savings: <b class="mono">${money(d.cash.start)}</b> → <b class="mono">${money(d.cash.end)}</b>
+      <span class="mono ${d.cash.change >= 0 ? "pos" : "neg"}">(${signed(d.cash.change)})</span></div>` : ""}
+    <div id="day-answer"></div>
+    <div class="fin-grid">
+      <section class="card fin-card fin-wide">
+        <header><h2>Daily spending</h2><span class="eyebrow">last 30 days · click a day</span></header>
+        ${dailyChart(d.series, ui.day, d.avg_daily_spending)}
+      </section>
+      <section class="card fin-card">
+        <header><h2>Where it went</h2><span class="eyebrow">${esc(dayLabel(ui.day, { month: "short", day: "numeric" }))}</span></header>
+        ${d.categories.filter((c) => c.spent > 0).length ? `<ul class="fin-list">${d.categories.filter((c) => c.spent > 0).map((c) => `
+          <li><div>${catChip(c.category)}</div><span class="muted small">${c.count}×</span><b class="mono">${money(c.spent)}</b></li>`).join("")}</ul>`
+          : `<div class="empty">No spending this day.</div>`}
+      </section>
+      <section class="card fin-card">
+        <header><h2>Money in</h2><span class="eyebrow">income</span></header>
+        ${d.income_items.length ? `<ul class="fin-list">${d.income_items.map((t) => `
+          <li><div><div class="fin-li-title">${esc(t.merchant)}</div><div class="fin-li-sub">${esc(t.account_name)}</div></div>
+          <b class="mono pos">${signed(t.amount)}</b></li>`).join("")}</ul>` : `<div class="empty">No income this day.</div>`}
+      </section>
+    </div>
+    <h2 class="section">All transactions <span class="count">${d.transactions.length}</span><span class="line"></span></h2>
+    ${d.transactions.length ? `<ul class="card fin-tx">${d.transactions.map(txRow).join("")}</ul>`
+      : `<div class="card empty">No transactions on this day. Banks usually post weekend purchases on Monday.</div>`}`;
+
+  const go = (day) => { ui.day = day; renderTab(root); };
+  box.querySelectorAll("[data-day]").forEach((b) => { b.onclick = () => go(shiftDay(ui.day, Number(b.dataset.day))); });
+  box.querySelector("[data-yesterday]")?.addEventListener("click", () => go(yesterday));
+  box.querySelectorAll("[data-pick]").forEach((b) => { b.onclick = () => go(b.dataset.pick); });
+  box.querySelectorAll(".fin-tx li").forEach((li) => { li.onclick = () => openTxEditor(byId[li.dataset.id], cats.all, () => renderTab(root)); });
+  box.querySelector("#day-explain").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const out = box.querySelector("#day-answer");
+    btn.disabled = true;
+    out.innerHTML = `<div class="card fin-answer loading"><p>${icon("loader")} Looking at ${esc(dayLabel(ui.day))}…</p></div>`;
+    try {
+      const r = await api.post("/finances/ask", { report: "day", day: ui.day });
+      out.innerHTML = answerCard({ title: `${dayLabel(ui.day)} · cash analysis`, answer: r.answer, changes: r.changes });
+    } catch (err) { out.innerHTML = `<div class="card fin-answer"><p class="error-msg">${esc(err.message)}</p></div>`; }
+    btn.disabled = false;
+  });
+}
+
+function dailyChart(series, selected, avg) {
+  const max = Math.max(1, avg * 1.5, ...series.map((r) => r.spending));
+  const avgPct = Math.min(100, (avg / max) * 100); // bars are 150px tall, sitting 20px above the bottom
+  return `
+    <div class="fin-legend"><span><i style="--c:var(--accent)"></i>Spending</span><span><i style="--c:var(--success)"></i>Income that day</span>
+      ${avg ? `<span><i class="dash"></i>Normal day ≈ ${money(avg, false)}</span>` : ""}</div>
+    <div class="fin-days">
+      ${avg ? `<div class="fin-days-avg" style="bottom:${(20 + avgPct * 1.5).toFixed(1)}px"></div>` : ""}
+      ${series.map((r) => `
+        <button class="fin-day ${r.date === selected ? "sel" : ""}" data-pick="${r.date}"
+          title="${esc(dayLabel(r.date, { weekday: "short", month: "short", day: "numeric" }))}: out ${money(r.spending)}${r.income ? `, in ${money(r.income)}` : ""}">
+          <span class="fin-day-in">${r.income ? `+${money(r.income, false)}` : ""}</span>
+          <span class="fin-day-bar"><span style="height:${((r.spending / max) * 100).toFixed(1)}%"></span></span>
+          <span class="fin-day-label">${Number(r.date.slice(8))}</span>
+        </button>`).join("")}
+    </div>`;
+}
+
+// ===========================================================================
+// Rules: plain-English rules the AI follows
+// ===========================================================================
+
+const RULE_EXAMPLES = [
+  "Zelle payments to Mike are my rent (Housing).",
+  "Transfers to my Capital One 360 Savings are savings, not spending (Transfer).",
+  "Venmo payments under $30 are usually food with friends (Dining & Coffee).",
+  "Anything from Evergy or Spire is Utilities & Phone.",
+  "Amazon orders are Shopping unless the description mentions Whole Foods (then Groceries).",
+];
+
+async function renderRules(box, root) {
+  const data = await api.get("/finances/rules");
+  box.innerHTML = `
+    <section class="card fin-card">
+      <header><h2>Your rules</h2><span class="eyebrow">plain English · followed by the AI</span></header>
+      <p class="fin-fine" style="margin-top:0">Write rules the way you'd explain them to a person. The AI follows them when it sorts
+        transactions into categories and when it answers your money questions. Your own one-off fixes on the Transactions tab
+        still win. You can also tell the AI bar: “Always put Venmo to Mike in Housing”.</p>
+      <form id="rule-form" class="fin-rule-form">
+        <textarea name="text" rows="2" placeholder="e.g. Zelle payments to Mike are my rent (Housing)." required>${esc(ui.ruleDraft)}</textarea>
+        <button class="btn primary" type="submit">${icon("plus")} Add rule</button>
+      </form>
+      <div class="chips fin-rule-examples">${RULE_EXAMPLES.map((x) => `<button class="chip" data-example="${esc(x)}">${esc(x)}</button>`).join("")}</div>
+    </section>
+    <section class="card fin-card" style="margin-top:14px">
+      <header><h2>${data.rules.length} rule${data.rules.length === 1 ? "" : "s"}</h2>
+        <button class="btn small ${ui.rulesChanged ? "primary" : ""}" id="rules-apply" ${data.resorting ? "disabled" : ""}>
+          ${icon("refresh")} ${data.resorting ? "Re-sorting…" : "Re-sort past transactions with my rules"}</button></header>
+      ${ui.rulesChanged ? `<p class="fin-fine" style="margin-top:0">New transactions always follow your rules. To apply changes to transactions you already have, click Re-sort.</p>` : ""}
+      ${data.rules.length ? `<ul class="fin-list fin-rules">${data.rules.map((r) => `
+        <li class="${r.enabled ? "" : "is-hidden"}" data-rule="${r.id}">
+          <input type="checkbox" class="fin-rule-on" ${r.enabled ? "checked" : ""} aria-label="Rule on">
+          <div class="fin-rule-text">${esc(r.text)}</div>
+          <button class="icon-btn" data-edit-rule aria-label="Edit rule">${icon("edit")}</button>
+          <button class="icon-btn danger" data-del-rule aria-label="Delete rule">${icon("trash")}</button></li>`).join("")}</ul>`
+        : `<div class="empty">No rules yet. Add one above or pick an example to start from.</div>`}
+    </section>`;
+  const form = box.querySelector("#rule-form");
+  const changed = (msg) => { ui.rulesChanged = true; ui.ruleDraft = ""; toast(msg); renderTab(root); };
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try { await api.post("/finances/rules", { text: form.text.value }); changed("Rule added"); }
+    catch (err) { showError(form, err); }
+  });
+  form.text.addEventListener("input", () => { ui.ruleDraft = form.text.value; });
+  box.querySelectorAll("[data-example]").forEach((b) => b.addEventListener("click", () => {
+    form.text.value = b.dataset.example; ui.ruleDraft = b.dataset.example; form.text.focus();
+  }));
+  box.querySelectorAll("[data-rule]").forEach((li) => {
+    const id = li.dataset.rule;
+    const rule = data.rules.find((r) => String(r.id) === id);
+    li.querySelector(".fin-rule-on").addEventListener("change", async (e) => {
+      await api.patch(`/finances/rules/${id}`, { enabled: e.target.checked });
+      changed(e.target.checked ? "Rule on" : "Rule paused");
+    });
+    li.querySelector("[data-del-rule]").addEventListener("click", async () => {
+      if (!confirm(`Delete this rule?\n\n${rule.text}`)) return;
+      await api.del(`/finances/rules/${id}`);
+      changed("Rule deleted");
+    });
+    li.querySelector("[data-edit-rule]").addEventListener("click", () => {
+      const dlg = openDialog({
+        title: "Edit rule",
+        body: `<form id="rule-edit" class="dlg-body" style="padding:0"><textarea name="text" rows="3" required>${esc(rule.text)}</textarea></form>`,
+        foot: `<div class="right"><button class="btn" data-close>Cancel</button><button class="btn primary" type="submit" form="rule-edit">Save</button></div>`,
+      });
+      const f = dlg.querySelector("form");
+      f.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        try { await api.patch(`/finances/rules/${id}`, { text: f.text.value }); dlg.close(); changed("Rule saved"); }
+        catch (err) { showError(f, err); }
+      });
+    });
+  });
+  box.querySelector("#rules-apply").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true; btn.innerHTML = `${icon("loader")} Re-sorting… (can take a minute)`;
+    try {
+      const r = await api.post("/finances/rules/apply");
+      toast(r.busy ? "Already re-sorting in the background" : `Re-sorted ${r.sorted} merchant${r.sorted === 1 ? "" : "s"} with your rules`, 5000);
+      ui.rulesChanged = false;
+    } catch (err) { toast(err.message, 8000); }
+    renderTab(root);
+  });
 }
 
 // ===========================================================================

@@ -45,6 +45,16 @@ class AskIn(BaseModel):
     question: str = ""
     history: list[Turn] = []
     report: str | None = None
+    day: str | None = None
+
+
+class RuleIn(BaseModel):
+    text: str
+
+
+class RulePatch(BaseModel):
+    text: str | None = None
+    enabled: bool | None = None
 
 
 def _run(fn, *args, **kwargs):
@@ -160,6 +170,47 @@ async def ask(body: AskIn):
         raise HTTPException(status_code=400, detail="Type a question first")
     try:
         return await run_in_threadpool(assistant.ask, body.question.strip(),
-                                       [t.model_dump() for t in body.history], body.report)
+                                       [t.model_dump() for t in body.history], body.report, body.day)
     except (AssistantError, simplefin.FinanceError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- Daily cash analysis ------------------------------------------------------------
+
+@router.get("/day")
+def day(date: str | None = None):
+    return _run(service.day_summary, date)
+
+
+# --- Your rules (plain English, followed by the AI) ----------------------------------
+
+@router.get("/rules")
+def rules():
+    return {"rules": _run(service.list_rules), "resorting": assistant.resorting()}
+
+
+@router.post("/rules")
+def add_rule(body: RuleIn):
+    return _run(service.add_rule, body.text)
+
+
+@router.patch("/rules/{rule_id}")
+def update_rule(rule_id: int, body: RulePatch):
+    return _run(service.update_rule, rule_id, body.text, body.enabled)
+
+
+@router.delete("/rules/{rule_id}")
+def delete_rule(rule_id: int):
+    _run(service.delete_rule, rule_id)
+    return {"ok": True}
+
+
+@router.post("/rules/apply")
+async def apply_rules():
+    """Re-sort every transaction the AI sorted, using the current rules."""
+    if assistant.resorting():
+        return {"sorted": 0, "busy": True}
+    try:
+        return {"sorted": await run_in_threadpool(assistant.resort)}
+    except AssistantError as e:
         raise HTTPException(status_code=400, detail=str(e))

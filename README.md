@@ -143,6 +143,8 @@ The bar at the top is always visible. Press **/** anywhere to jump to it. Type a
 | `Am I on track with my budget this month?` | Compares spending so far with your budgets and the day of the month |
 | `What subscriptions am I paying for?` | Lists recurring charges with amounts |
 | `Set my dining budget to $300` | Sets that monthly budget |
+| `How did yesterday go money-wise?` | Income, spending and net for yesterday, compared with a normal day |
+| `Always put Zelle payments to Mike in Housing` | Saves it as a finance rule and re-sorts your transactions with it |
 | `Remind me to call Mom at 6pm` | Adds a task due today with a 6 PM reminder |
 | `Remind me every day at 7am to do my skincare` | Adds a daily reminder to that routine (only pops up if it isn't done yet) |
 | `Follow up with Sarah about the contract Friday at 10am` | Adds a follow-up with a reminder |
@@ -212,6 +214,8 @@ The app reads your accounts through **SimpleFIN Bridge** (about $15 a year), whi
 Using it:
 - **Overview**: money in, money out and net for each month (‹ › to change month), a 4-month cash-flow chart, balances, spending by category against your budgets, recurring charges and top merchants. Click a category to see its transactions.
 - **Transactions**: filter by month, account, category or search. Click one to change its category; by default the change applies to every similar transaction (same merchant) from now on. Card payments and moves between your accounts are detected as **Transfers** and left out of income and spending, so nothing is counted twice.
+- **Daily**: a prior-day cash analysis (yesterday by default; ‹ › for other days): money in and what it was, money out and where it went, net for the day, how it compares with a normal day, the month so far, and how your checking and savings balances moved. A 30-day chart shows daily spending with paydays marked; click any day. **Explain this day** writes a short AI analysis.
+- **Rules**: plain-English rules the AI follows when sorting transactions and answering questions, e.g. "Zelle payments to Mike are my rent (Housing)" or "Transfers to my 360 Savings are savings, not spending". Turn rules on or off, edit or delete them, and click **Re-sort past transactions with my rules** to apply changes to transactions you already have (new ones always follow your rules). You can also say it to the AI bar: "Always put Venmo to Mike in Housing". In a transaction, **Make a rule…** starts one for you. Your own fixes on the Transactions tab always win.
 - **Budgets**: a monthly amount per category. **Fill in from my average spending** gives you a starting point. Bars turn yellow when you're ahead of pace and red when you're over.
 - **Reports & questions**: one-click AI reports (this month, last month, last 90 days), or ask anything about your money.
 - The app syncs when it starts and when you open Finances (if the last sync is a few hours old), and with **Sync now**. SimpleFIN itself refreshes from your banks about once a day. If a bank needs you to sign in again, a notice appears; fix it on the SimpleFIN website.

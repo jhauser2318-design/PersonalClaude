@@ -147,9 +147,11 @@ def briefing(conn, today: date) -> str:
     try:
         yesterday = (today - timedelta(days=1)).isoformat()
         from .modules.finances import service as fin  # only loaded once a day
-        spent = fin.totals(conn, yesterday, yesterday)["spending"]
-        if spent > 0:
-            parts.append(f"${spent:,.0f} spent yesterday")
+        y = fin.totals(conn, yesterday, yesterday)
+        if y["income"] > 0:
+            parts.append(f"yesterday +${y['income']:,.0f} in, ${y['spending']:,.0f} out")
+        elif y["spending"] > 0:
+            parts.append(f"${y['spending']:,.0f} spent yesterday")
     except Exception:  # noqa: BLE001 (Finances not set up, or anything else: skip that line)
         pass
     return " · ".join(parts)

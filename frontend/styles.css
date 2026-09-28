@@ -1216,3 +1216,7 @@ input[type=range] { width: 100%; accent-color: var(--area, var(--accent)); }
 .star-input button.on { color: var(--warning); text-shadow: 0 0 10px rgba(251, 191, 36, .4); }
 @media (max-width: 1080px) { .fun-cols { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .fun-bars li { grid-template-columns: 120px 1fr 24px; } }
+.job-check { width: 18px; height: 18px; accent-color: var(--success); flex: none; cursor: pointer; margin: 0; }
+.job-row .fin-li-sub .dot { display: inline-block; }
+.job-done summary { cursor: pointer; color: var(--text-3); font: 600 12px var(--font-mono); text-transform: uppercase; letter-spacing: .08em; margin-top: 10px; }
+.job-done .fin-li-title { text-decoration: line-through; color: var(--text-3); }

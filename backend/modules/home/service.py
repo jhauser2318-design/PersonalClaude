@@ -4,7 +4,7 @@ insurance renewals, warranties). Each gets a heads-up notification.
 """
 from datetime import date, timedelta
 
-from ...database import register_schema, row_to_dict
+from ...database import add_column, register_schema, row_to_dict
 from ..goals.service import ValidationError, now_iso
 
 register_schema(
@@ -39,6 +39,10 @@ register_schema(
     );
     """
 )
+
+# One-time jobs ("fix the leaky faucet by Friday") live next to the repeating upkeep.
+add_column("maintenance", "one_time", "INTEGER NOT NULL DEFAULT 0")
+add_column("maintenance", "due_date", "TEXT")
 
 CATEGORIES = ["home", "car", "health", "other"]
 UNITS = ["days", "weeks", "months", "years"]
@@ -77,6 +81,15 @@ def add_interval(d: date, n: int, unit: str) -> date:
 def _item(conn, row) -> dict:
     it = dict(row)
     today = date.today()
+    it["log"] = [dict(r) for r in conn.execute(
+        "SELECT * FROM maintenance_log WHERE item_id = ? ORDER BY date DESC, id DESC LIMIT 10", (it["id"],))]
+    if it["one_time"]:
+        it["next_due"] = it["due_date"]
+        it["due_in"] = (date.fromisoformat(it["due_date"]) - today).days if it["due_date"] and not it["last_done"] else None
+        it["status"] = ("done" if it["last_done"] else "todo" if it["due_in"] is None else "overdue" if it["due_in"] < 0
+                        else "soon" if it["due_in"] <= 14 else "ok")
+        it["every_text"] = "one-time"
+        return it
     if it["last_done"]:
         nxt = add_interval(date.fromisoformat(it["last_done"]), it["every_n"], it["every_unit"])
         it["next_due"] = nxt.isoformat()
@@ -86,14 +99,23 @@ def _item(conn, row) -> dict:
     it["status"] = ("never" if it["due_in"] is None else "overdue" if it["due_in"] < 0
                     else "soon" if it["due_in"] <= 14 else "ok")
     it["every_text"] = f"every {it['every_n']} {it['every_unit'][:-1] if it['every_n'] == 1 else it['every_unit']}"
-    it["log"] = [dict(r) for r in conn.execute(
-        "SELECT * FROM maintenance_log WHERE item_id = ? ORDER BY date DESC, id DESC LIMIT 10", (it["id"],))]
     return it
 
 
 def list_maintenance(conn) -> list[dict]:
     items = [_item(conn, r) for r in conn.execute("SELECT * FROM maintenance")]
-    return sorted(items, key=lambda i: (i["due_in"] is not None, i["due_in"] if i["due_in"] is not None else 0, i["name"]))
+    return sorted(items, key=lambda i: (i["status"] == "done", i["due_in"] is None, i["due_in"] if i["due_in"] is not None else 0,
+                                        i["name"]))
+
+
+def undo_done(conn, item_id: int) -> dict:
+    """Reopen a one-time job (removes its latest 'done')."""
+    row = conn.execute("SELECT id FROM maintenance_log WHERE item_id = ? ORDER BY date DESC, id DESC LIMIT 1", (item_id,)).fetchone()
+    if row:
+        delete_log(conn, row[0])
+    if not conn.execute("SELECT 1 FROM maintenance_log WHERE item_id = ?", (item_id,)).fetchone():
+        conn.execute("UPDATE maintenance SET last_done = NULL WHERE id = ?", (item_id,))
+    return get_item(conn, item_id)
 
 
 def get_item(conn, item_id: int) -> dict | None:
@@ -105,12 +127,14 @@ def save_item(conn, fields: dict, item_id: int | None = None) -> dict:
     name = (fields.get("name") or "").strip()
     if not name:
         raise ValidationError("Give it a name, like “Change HVAC filter”")
-    n = int(fields.get("every_n") or 0)
+    one_time = 1 if fields.get("one_time") else 0
+    n = int(fields.get("every_n") or (1 if one_time else 0))
     if n < 1:
         raise ValidationError("How often: a number like 3 (months)")
     data = {"name": name, "category": fields.get("category") if fields.get("category") in CATEGORIES else "home",
             "every_n": n, "every_unit": fields.get("every_unit") if fields.get("every_unit") in UNITS else "months",
-            "last_done": _date(fields.get("last_done"), "last-done date"), "notes": (fields.get("notes") or "").strip()}
+            "last_done": _date(fields.get("last_done"), "last-done date"), "notes": (fields.get("notes") or "").strip(),
+            "one_time": one_time, "due_date": _date(fields.get("due_date"), "due date") if one_time else None}
     if item_id:
         conn.execute(f"UPDATE maintenance SET {', '.join(f'{k} = ?' for k in data)} WHERE id = ?", (*data.values(), item_id))
     else:
@@ -192,13 +216,14 @@ def overview(conn) -> dict:
     items = list_maintenance(conn)
     dates = list_dates(conn)
     return {"maintenance": items, "dates": dates, "categories": CATEGORIES, "units": UNITS, "kinds": KINDS,
-            "attention": sum(1 for i in items if i["status"] in ("overdue", "soon"))
+            "attention": sum(1 for i in items if i["status"] in ("overdue", "soon") or (i["one_time"] and i["status"] == "todo"))
             + sum(1 for d in dates if d["status"] in ("expired", "soon"))}
 
 
 def context_line(conn) -> str:
-    items = [i for i in list_maintenance(conn) if i["status"] in ("overdue", "soon", "never")][:8]
+    items = [i for i in list_maintenance(conn) if i["status"] in ("overdue", "soon", "never", "todo")][:10]
     dates = [d for d in list_dates(conn) if d["status"] in ("expired", "soon")][:8]
-    parts = [f"{i['name']} ({'due ' + i['next_due'] if i['next_due'] else 'never logged'})" for i in items]
+    parts = [f"{i['name']} ({'one-time job, ' if i['one_time'] else ''}"
+             f"{'due ' + i['next_due'] if i['next_due'] else 'no date' if i['one_time'] else 'never logged'})" for i in items]
     parts += [f"{d['name']} expires {d['date']}" for d in dates]
     return ("HOME MAINTENANCE coming up: " + "; ".join(parts)) if parts else ""

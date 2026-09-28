@@ -362,6 +362,17 @@ def _seed_life(conn, today: date, rnd: random.Random, g: dict) -> None:
     ]:
         item = home.save_item(conn, {"name": name, "category": cat, "every_n": n, "every_unit": unit, "notes": notes})
         home.mark_done(conn, item["id"], last.isoformat(), None)
+    for name, cat, due, done, cost, notes in [
+        ("Fix the leaky bathroom faucet", "home", D(4), None, None, "Probably the cartridge"),
+        ("Replace garage door opener remote", "car", None, None, None, ""),
+        ("Get winter tires put on", "car", D(30), None, None, "Book at Discount Tire"),
+        ("Patch the drywall in the hallway", "home", D(-2), None, None, ""),
+        ("Install new smart thermostat", "home", D(-12), D(-10), 129, ""),
+    ]:
+        job = home.save_item(conn, {"name": name, "category": cat, "one_time": True,
+                                    "due_date": due.isoformat() if due else None, "notes": notes})
+        if done:
+            home.mark_done(conn, job["id"], done.isoformat(), cost)
     for name, kind, when, remind, where in [
         ("Passport", "document", D(210), 180, "Fire safe"),
         ("Driver's license", "document", D(400), 60, "Wallet"),

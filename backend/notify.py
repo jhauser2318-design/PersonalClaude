@@ -171,7 +171,13 @@ def _reach_out(conn, now, today):
 
 def _maintenance(conn, now, today):
     from .modules.home.service import add_interval
-    for it in conn.execute("SELECT * FROM maintenance WHERE last_done IS NOT NULL").fetchall():
+    for it in conn.execute("SELECT * FROM maintenance WHERE last_done IS NULL AND due_date IS NOT NULL").fetchall():
+        due = date.fromisoformat(it["due_date"])  # one-time jobs (recurring items have no due_date)
+        if due <= today + timedelta(days=3):
+            when = "due today" if due == today else ("overdue since " + due.strftime("%b %d") if due < today
+                                                     else "due " + due.strftime("%a %b %d"))
+            _add(conn, "home", f"🔧 {it['name']}", when[0].upper() + when[1:], "home", it["id"], f"job:{it['id']}:{due.isoformat()}", now)
+    for it in conn.execute("SELECT * FROM maintenance WHERE last_done IS NOT NULL AND COALESCE(one_time, 0) = 0").fetchall():
         due = add_interval(date.fromisoformat(it["last_done"]), it["every_n"], it["every_unit"])
         if due <= today + timedelta(days=3):
             when = "due today" if due == today else ("overdue since " + due.strftime("%b %d") if due < today

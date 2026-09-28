@@ -12,6 +12,8 @@ router = APIRouter(prefix="/api/home", tags=["home"])
 class ItemIn(BaseModel):
     name: str
     category: str = "home"
+    one_time: bool = False
+    due_date: str | None = None
     every_n: int = 3
     every_unit: str = "months"
     last_done: str | None = None
@@ -66,6 +68,11 @@ def delete_item(item_id: int):
 @router.post("/maintenance/{item_id}/done")
 def done(item_id: int, body: DoneIn):
     return _run(service.mark_done, item_id, body.date, body.cost, body.note)
+
+
+@router.post("/maintenance/{item_id}/reopen")
+def reopen(item_id: int):
+    return _run(service.undo_done, item_id)
 
 
 @router.delete("/maintenance/log/{log_id}")

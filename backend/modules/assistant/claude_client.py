@@ -16,35 +16,68 @@ from ... import config
 from ...areas import AREAS
 
 AREA_ENUM = [a["id"] for a in AREAS]
-ACTION_TYPES = ["create_goal", "update_goal", "add_note", "create_task", "update_task", "complete_task"]
+ACTION_TYPES = ["create_goal", "update_goal", "add_note", "create_task", "update_task", "complete_task",
+                "create_habit", "update_habit", "log_habit"]
 
 
-def _nullable(schema: dict) -> dict:
-    return {"anyOf": [schema, {"type": "null"}]}
-
+# Every action field is always present, with a "blank" value when it doesn't
+# apply ("" for text, 0 for ids and amounts, -1 for progress, [] for days).
+# This keeps the schema free of optional and nullable fields, which the API
+# limits (max 16 union-type fields) and which make schemas slow to compile.
+# normalize_action() turns the blanks back into None.
+BLANKS = {
+    "goal_id": 0, "task_id": 0, "habit_id": 0, "title": "", "area": "", "description": "",
+    "target_date": "", "status": "", "progress": -1, "note": "", "due_date": "", "priority": "",
+    "done": "", "frequency": "", "days": [], "times_per_week": 0, "target_amount": 0, "unit": "",
+    "amount": 0, "date": "", "active": "",
+}
+YES_NO = {"yes": True, "no": False}
 
 ACTION_SCHEMA = {
     "type": "object",
     "properties": {
         "type": {"type": "string", "enum": ACTION_TYPES},
-        "goal_id": _nullable({"type": "integer"}),
-        "task_id": _nullable({"type": "integer"}),
+        "goal_id": {"type": "integer"},
+        "task_id": {"type": "integer"},
+        "habit_id": {"type": "integer"},
         "link_to_new_goal": {"type": "boolean"},
-        "title": _nullable({"type": "string"}),
-        "area": _nullable({"type": "string", "enum": AREA_ENUM}),
-        "description": _nullable({"type": "string"}),
-        "target_date": _nullable({"type": "string"}),
-        "status": _nullable({"type": "string", "enum": ["not_started", "in_progress", "done", "paused"]}),
-        "progress": _nullable({"type": "integer"}),
-        "note": _nullable({"type": "string"}),
-        "due_date": _nullable({"type": "string"}),
-        "priority": _nullable({"type": "string", "enum": ["low", "medium", "high"]}),
-        "done": _nullable({"type": "boolean"}),
+        "title": {"type": "string"},
+        "area": {"type": "string", "enum": AREA_ENUM + [""]},
+        "description": {"type": "string"},
+        "target_date": {"type": "string"},
+        "status": {"type": "string", "enum": ["not_started", "in_progress", "done", "paused", ""]},
+        "progress": {"type": "integer"},
+        "note": {"type": "string"},
+        "due_date": {"type": "string"},
+        "priority": {"type": "string", "enum": ["low", "medium", "high", ""]},
+        "done": {"type": "string", "enum": ["yes", "no", ""]},
+        "frequency": {"type": "string", "enum": ["daily", "weekdays", "times_per_week", ""]},
+        "days": {"type": "array", "items": {"type": "integer"}},
+        "times_per_week": {"type": "integer"},
+        "target_amount": {"type": "number"},
+        "unit": {"type": "string"},
+        "amount": {"type": "number"},
+        "date": {"type": "string"},
+        "active": {"type": "string", "enum": ["yes", "no", ""]},
     },
-    "required": ["type", "goal_id", "task_id", "link_to_new_goal", "title", "area", "description",
-                 "target_date", "status", "progress", "note", "due_date", "priority", "done"],
     "additionalProperties": False,
 }
+ACTION_SCHEMA["required"] = list(ACTION_SCHEMA["properties"])
+
+
+def normalize_action(action: dict) -> dict:
+    """Turn the schema's blank values back into None (and yes/no into booleans)."""
+    out = {}
+    for key, value in action.items():
+        if key in ("done", "active"):
+            value = YES_NO.get(value)
+        elif key in BLANKS and value == BLANKS[key]:
+            value = None
+        elif key == "progress" and isinstance(value, (int, float)) and value < 0:
+            value = None
+        out[key] = value
+    return out
+
 
 RESPONSE_SCHEMA = {
     "type": "object",
@@ -65,17 +98,21 @@ The user types short natural sentences. Work out what they mean and respond with
 2. intent "answer": the user asked a question (e.g. "What should I focus on this week?"). Leave "actions" empty and answer in "reply" using their actual goals and tasks. Keep it concise: a short intro and at most 5 bullet points starting with "- ". Mention overdue and high-priority items first.
 3. intent "clarify": you are not reasonably sure what they want, or which goal/task they mean (for example two goals match equally well, or none match). Leave "actions" empty and ask ONE short clarifying question in "reply". Never guess when a wrong guess would change the wrong item.
 
-Actions (every field must be present; use null for fields that don't apply to that action, and false for link_to_new_goal unless stated):
+Actions. Every field must be present in every action. For fields that don't apply, use the blank value: "" for text and choice fields, 0 for goal_id/task_id/habit_id/times_per_week/target_amount/amount, -1 for progress, [] for days, false for link_to_new_goal. done and active take "yes", "no" or "". "Leave X unchanged" always means the blank value.
 - create_goal: title, area (required); description, target_date, status, progress (optional).
-- update_goal: goal_id (required) plus only the fields that change (title, area, description, target_date, status, progress). Leave all others null.
+- update_goal: goal_id (required) plus only the fields that change (title, area, description, target_date, status, progress). Leave all others blank.
 - add_note: goal_id (required), note (required). A timestamped progress update on a goal. Use this whenever the user reports something they did toward a goal ("Went to the gym today").
-- create_task: title, area (required unless it's linked to a goal); goal_id to link it to an existing goal; due_date, priority (optional, default medium). If the task belongs to a goal created earlier in this SAME response, set goal_id null and link_to_new_goal true.
-- update_task: task_id (required) plus only the fields that change (title, area, goal_id, due_date, priority, done).
+- create_task: title, area (required unless it's linked to a goal); goal_id to link it to an existing goal; due_date, priority (optional, default medium). If the task belongs to a goal created earlier in this SAME response, set goal_id 0 and link_to_new_goal true.
+- update_task: task_id (required) plus only the fields that change (title, area, goal_id, due_date, priority, done "yes"/"no").
 - complete_task: task_id (required). Marks a task as done.
+- create_habit: a ROUTINE, i.e. a recurring task the user wants to do regularly (gym, skincare, studying, meditation...). title, area (required); frequency: "daily", "weekdays" (then days: list of weekday numbers, 0=Monday ... 6=Sunday) or "times_per_week" (then times_per_week: 1-7); optional target_amount + unit for a daily amount (e.g. 2 "hours", 10000 "steps"); optional goal_id to link it to a goal.
+- update_habit: habit_id (required) plus only the fields that change (title, area, goal_id, frequency, days, times_per_week, target_amount, unit). To pause a routine set active "no"; to resume it set active "yes".
+- log_habit: habit_id (required). Records that the user did a routine. date: "" means today; set it (YYYY-MM-DD) for "yesterday" etc. amount: how much they did if the routine has a unit (e.g. "studied CPA for 3 hours" -> 3); 0 means "fully done". note: optional short detail.
 
 Rules:
+- Routines vs tasks: something repeated on a schedule ("every day", "3 times a week", "each morning") is a routine (create_habit). A one-off action is a task. When the user says they did something that matches a routine ("went to the gym", "did my skincare", "studied for the CPA 2 hours"), use log_habit, not a task or a goal note. If that routine is also linked to a goal, you may additionally add a short goal note only when the user describes real progress on the goal.
 - Use the IDs from the data provided. Match loosely by meaning ("my fitness goal" can match "Run a 5K" in Health; "the Spanish lesson task" matches a task mentioning Spanish lesson). If exactly one item is a clear match, use it.
-- When the user reports progress on a goal, add a note describing what they did (in their words, tidied up). Only change "progress" if they give a number or the update clearly moves a measurable goal forward; otherwise leave it null. If the goal's status is not_started, also set status to in_progress with an update_goal action.
+- When the user reports progress on a goal, add a note describing what they did (in their words, tidied up). Only change "progress" if they give a number or the update clearly moves a measurable goal forward; otherwise leave it -1. If the goal's status is not_started, also set status to in_progress with an update_goal action.
 - Dates must be YYYY-MM-DD. Resolve relative dates from today's date given below: "Friday" means the next upcoming Friday (today if today is Friday), "next week" means next Monday, "by March" means the last day of the next upcoming March, "end of month" the last day of the current month.
 - Pick the area from context: gym/running/diet/sleep/doctor = health; job/colleagues/boss/budget/clients = work; friends/family/parties = social; courses/languages/reading/studying = education. If the user names an area, use it. If the area truly can't be inferred, ask.
 - Titles should be short and start with a capital letter, without the date in them ("Email Sarah about the budget").
@@ -87,7 +124,7 @@ class AssistantError(Exception):
     """A problem talking to Claude, with a message safe to show the user."""
 
 
-def build_context(goals: list[dict], tasks: list[dict]) -> str:
+def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | None = None) -> str:
     today = date.today()
     lines = [f"Today is {today.strftime('%A')}, {today.isoformat()}.", "", "GOALS (id | area | title | status | progress | target date | last update):"]
     if not goals:
@@ -105,6 +142,22 @@ def build_context(goals: list[dict], tasks: list[dict]) -> str:
         lines.append(
             f"#{t['id']} | {t['area']} | {t['title']} | {t['goal_id'] or '-'} | "
             f"{t['due_date'] or 'no date'} | {t['priority']} | {'done' if t['done'] else 'open'}"
+        )
+    lines += ["", "ROUTINES (id | area | title | schedule | today | streak | active):"]
+    if not habits:
+        lines.append("(none yet)")
+    for h in habits or []:
+        if h["done_today"]:
+            today_s = "done today"
+        elif h["logged_today"]:
+            today_s = f"partly done today ({h['amount_today']:g} {h['unit'] or ''})".rstrip()
+        else:
+            today_s = "not done today"
+        if h["frequency"] == "times_per_week":
+            today_s += f", {h['week_done']}/{h['times_per_week']} this week"
+        lines.append(
+            f"#{h['id']} | {h['area']} | {h['title']} | {h['schedule_text']} | {today_s} | "
+            f"{h['streak']} | {'active' if h['active'] else 'paused'}"
         )
     return "\n".join(lines)
 
@@ -174,6 +227,6 @@ def ask_claude(text: str, context: str, history: list[dict]) -> dict:
         data = json.loads(texts[-1])
     except json.JSONDecodeError:
         raise AssistantError("Claude's response wasn't in the expected format. Please try again.")
-    data.setdefault("actions", [])
+    data["actions"] = [normalize_action(a) for a in data.get("actions") or []]
     data.setdefault("reply", "")
     return data

@@ -1,51 +1,66 @@
-// Home screen: progress per area, what's due, what's overdue, recent updates.
+// Home screen: the "command center". Area progress, today's routines,
+// what's due, what's overdue, and recent activity.
 import { api } from "../api.js";
 import { bindGoals, bindTasks, goalGrid, taskList } from "../components.js";
-import { areaStyle, areaTag, esc, fmtDateTime, progressBar } from "../ui.js";
+import { bindRoutines, routineList } from "../routines.js";
+import { areaStyle, areaTag, esc, fmtDateTime, ring } from "../ui.js";
 
 function greeting() {
   const h = new Date().getHours();
-  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+  return h < 5 ? "Working late" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
 export async function render(view) {
-  const d = await api.get("/dashboard");
-  const today = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  const [d, habits] = await Promise.all([api.get("/dashboard"), api.get("/habits")]);
+  const now = new Date();
+  const stamp = now.toLocaleDateString(undefined, { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
   const overdueCount = d.overdue_tasks.length + d.overdue_goals.length;
+  const todays = habits.filter((h) => h.due_today);
+  const routinesLeft = todays.filter((h) => !h.done_today).length;
   const allTasks = [...d.overdue_tasks, ...d.due_today, ...d.due_this_week];
 
   view.innerHTML = `
     <div class="page-head"><div>
-      <h1>${greeting()}</h1>
-      <p class="sub">${esc(today)} · ${d.due_today.length} due today${overdueCount ? ` · <span class="due overdue">${overdueCount} overdue</span>` : ""}</p>
+      <div class="eyebrow">Command center · ${esc(stamp)}</div>
+      <h1>${greeting()}.</h1>
+      <div class="status-chips">
+        <span class="status-chip"><span class="dot" style="--c:var(--accent-2)"></span><b>${routinesLeft}</b> routine${routinesLeft === 1 ? "" : "s"} left today</span>
+        <span class="status-chip"><span class="dot" style="--c:var(--warning)"></span><b>${d.due_today.length}</b> task${d.due_today.length === 1 ? "" : "s"} due today</span>
+        ${overdueCount ? `<span class="status-chip"><span class="dot" style="--c:var(--danger)"></span><b>${overdueCount}</b> overdue</span>` : ""}
+        <span class="status-chip"><span class="dot" style="--c:var(--success)"></span><b>${d.due_this_week.length}</b> this week</span>
+      </div>
     </div></div>
 
     <div class="area-grid">
       ${d.areas.map((a) => `
         <a class="card area-card" href="#/area/${a.id}" style="--area:${a.color}">
-          <div class="ac-head"><span class="ac-name">${esc(a.icon)} ${esc(a.name)}</span><span class="ac-pct">${a.progress}%</span></div>
-          ${progressBar(a.progress, a.id)}
-          <div class="ac-meta">${a.goal_count} goal${a.goal_count === 1 ? "" : "s"} · ${a.open_tasks} open task${a.open_tasks === 1 ? "" : "s"}</div>
+          ${ring(a.progress, a.id, 62)}
+          <div>
+            <div class="ac-name">${esc(a.name)}</div>
+            <div class="ac-meta">${a.goal_count} goal${a.goal_count === 1 ? "" : "s"} · ${a.open_tasks} open</div>
+          </div>
         </a>`).join("")}
     </div>
 
     <div class="dash-cols">
-      <div id="dash-tasks">
+      <div>
         ${overdueCount ? `
-          <div class="card attention" style="padding:14px;margin-top:28px">
-            <h2 class="section">⚠ Overdue <span class="count">${overdueCount}</span></h2>
+          <div class="card attention" id="dash-overdue">
+            <h2 class="section">⚠ Overdue <span class="count">${overdueCount}</span><span class="line"></span></h2>
             ${d.overdue_tasks.length ? taskList(d.overdue_tasks) : ""}
             ${d.overdue_goals.length ? `<div style="margin-top:12px">${goalGrid(d.overdue_goals)}</div>` : ""}
           </div>` : ""}
-        <h2 class="section">Due today <span class="count">${d.due_today.length}</span></h2>
-        ${taskList(d.due_today, { empty: "Nothing due today. 🎉" })}
-        <h2 class="section">Next 7 days <span class="count">${d.due_this_week.length}</span></h2>
-        ${taskList(d.due_this_week, { empty: "Nothing scheduled this week." })}
+        <h2 class="section">Today's routines <span class="count">${todays.length - routinesLeft}/${todays.length}</span><span class="line"></span><a href="#/routines">All →</a></h2>
+        <div id="dash-routines">${routineList(todays, "No routines due today. Add one on the Routines page.")}</div>
+        <h2 class="section">Due today <span class="count">${d.due_today.length}</span><span class="line"></span></h2>
+        <div id="dash-today">${taskList(d.due_today, { empty: "Nothing due today. 🎉" })}</div>
+        <h2 class="section">Next 7 days <span class="count">${d.due_this_week.length}</span><span class="line"></span></h2>
+        <div id="dash-week">${taskList(d.due_this_week, { empty: "Nothing scheduled this week." })}</div>
       </div>
 
       <div>
-        <h2 class="section">Recent updates</h2>
-        <div class="card" style="padding:16px">
+        <h2 class="section">Activity feed<span class="line"></span></h2>
+        <div class="card" style="padding:18px 16px 4px">
           <ul class="timeline">
             ${d.recent_notes.map((n) => `
               <li style="${areaStyle(n.area)}">
@@ -56,11 +71,16 @@ export async function render(view) {
           </ul>
         </div>
         ${d.recently_done.length ? `
-          <h2 class="section">Recently completed</h2>
-          ${taskList(d.recently_done)}` : ""}
+          <h2 class="section">Recently completed<span class="line"></span></h2>
+          <div id="dash-done">${taskList(d.recently_done)}</div>` : ""}
       </div>
     </div>`;
 
-  bindTasks(view, [...allTasks, ...d.recently_done]);
-  bindGoals(view.querySelector(".attention") || document.createElement("div"));
+  for (const id of ["#dash-overdue", "#dash-today", "#dash-week", "#dash-done"]) {
+    const el = view.querySelector(id);
+    if (el) bindTasks(el, [...allTasks, ...d.recently_done]);
+  }
+  bindRoutines(view.querySelector("#dash-routines"), todays);
+  const overdue = view.querySelector("#dash-overdue");
+  if (overdue) bindGoals(overdue);
 }

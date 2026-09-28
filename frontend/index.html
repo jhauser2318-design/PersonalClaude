@@ -6,13 +6,16 @@
   <title>Life Control Center</title>
   <link rel="icon" href="icon.png">
   <link rel="apple-touch-icon" href="icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
   <link rel="stylesheet" href="styles.css">
+  <meta name="theme-color" content="#070a12">
   <script>
-    // Apply the saved theme before the page draws, so there's no flash.
-    try {
-      const t = localStorage.getItem("lcc-theme");
-      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
-    } catch (e) {}
+    // Apply the saved theme before the page draws, so there's no flash. Dark is the default.
+    let t = "dark";
+    try { t = localStorage.getItem("lcc-theme") || "dark"; } catch (e) {}
+    document.documentElement.dataset.theme = t;
   </script>
 </head>
 <body>
@@ -20,9 +23,13 @@
     <aside class="sidebar" id="sidebar" aria-label="Main navigation">
       <div class="brand">
         <span class="brand-mark" aria-hidden="true"></span>
-        <span class="brand-name">Life Control Center</span>
+        <span class="brand-text">
+          <span class="brand-name">Life Control Center</span>
+          <span class="brand-sub">Personal OS</span>
+        </span>
       </div>
       <nav id="nav"></nav>
+      <div class="sys-status" id="sys-status"><span class="pulse"></span><span>AI link online</span></div>
     </aside>
     <div class="scrim" id="scrim" hidden></div>
 
@@ -30,16 +37,17 @@
       <header class="topbar">
         <button class="icon-btn menu-btn" id="menu-btn" aria-label="Open menu"></button>
         <form class="command" id="command-form" autocomplete="off">
-          <span class="command-icon" aria-hidden="true"></span>
+          <span class="ai-orb" aria-hidden="true">AI</span>
           <input id="command-input" type="text" enterkeyhint="send"
-                 placeholder="Tell me what happened…"
+                 placeholder="Tell the AI what happened, or what to add…"
                  aria-label="Command bar: type a sentence like 'Add a work task to email Sarah by Friday'">
+          <span class="kbd" aria-hidden="true">/</span>
           <button class="command-send" id="command-send" type="submit" aria-label="Send"></button>
         </form>
       </header>
       <div class="command-result" id="command-result" hidden></div>
       <div class="notice" id="key-notice" hidden>
-        The command bar needs an Anthropic API key. Add it to your <code>.env</code> file and restart the app. See the README, step 3.
+        The command bar needs an Anthropic API key. Run INSTALL.bat again to paste it in (or add it to <code>.env</code>), then reopen the app.
       </div>
       <main class="content" id="view" tabindex="-1"></main>
     </div>

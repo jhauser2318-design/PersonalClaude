@@ -18,10 +18,10 @@ function buildNav() {
   const main = MODULES.filter((m) => !m.comingSoon);
   const soon = MODULES.filter((m) => m.comingSoon);
   $("#nav").innerHTML = `
-    ${main.map((m) => link(`#/${m.id}`, `${icon(m.icon)}${esc(m.label)}`)).join("")}
-    <div class="nav-section">Life areas</div>
+    ${main.map((m) => link(`#/${m.id}`, `${icon(m.icon)}${esc(m.label)}${m.id === "routines" ? `<span class="nav-badge" id="routine-badge" hidden></span>` : ""}`)).join("")}
+    <div class="nav-section eyebrow">Life areas</div>
     ${state.areas.map((a) => link(`#/area/${a.id}`, `<span class="dot" style="--area:${a.color}"></span>${esc(a.name)}`)).join("")}
-    <div class="nav-section">Coming soon</div>
+    <div class="nav-section eyebrow">Coming soon</div>
     ${soon.map((m) => link(`#/${m.id}`, `${icon(m.icon)}${esc(m.label)}<span class="soon">Soon</span>`, "disabled")).join("")}
     <div class="nav-section"></div>
     ${link("#/settings", `${icon("settings")}Settings`)}`;
@@ -62,13 +62,28 @@ state.refresh = async () => {
   const y = window.scrollY;
   await route();
   window.scrollTo(0, y);
+  updateBadge();
 };
+
+// Sidebar badge: how many of today's routines are still to do.
+async function updateBadge() {
+  const badge = $("#routine-badge");
+  if (!badge) return;
+  try {
+    const left = (await api.get("/habits")).filter((h) => h.due_today && !h.done_today).length;
+    badge.textContent = left;
+    badge.hidden = left === 0;
+  } catch (e) { badge.hidden = true; }
+}
 
 // ===========================================================================
 // Command bar
 // ===========================================================================
 
 const EXAMPLES = [
+  "Went to the gym and did my skincare",
+  "Studied CPA for 2.5 hours today",
+  "Set up a daily reading routine, 20 pages a day",
   "New health goal: run a 5K by March",
   "Went to the gym today, update my fitness goal",
   "Add a work task to email Sarah about the budget by Friday",
@@ -151,7 +166,6 @@ async function runCommand(text) {
 
 function setupCommandBar() {
   const input = $("#command-input");
-  $(".command-icon").innerHTML = icon("sparkle");
   $("#command-send").innerHTML = icon("send");
   $("#command-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -188,6 +202,9 @@ async function start() {
     setAreas(await api.get("/areas"));
     const status = await api.get("/command/status");
     $("#key-notice").hidden = status.api_key_configured;
+    if (!status.api_key_configured) {
+      $("#sys-status").innerHTML = `<span class="pulse off"></span><span>AI link offline · no key</span>`;
+    }
   } catch (err) {
     view.innerHTML = `<div class="card empty">Can't reach the app's backend. Make sure it's running (see README).</div>`;
     return;
@@ -195,6 +212,7 @@ async function start() {
   buildNav();
   window.addEventListener("hashchange", route);
   route();
+  updateBadge();
   announceUpdate();
 }
 

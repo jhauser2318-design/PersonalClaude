@@ -9,6 +9,7 @@ import json
 from ...database import register_schema, row_to_dict
 from ..goals import service
 from ..goals.service import ValidationError
+from ..habits import service as habits
 
 register_schema(
     """
@@ -25,6 +26,8 @@ register_schema(
 
 GOAL_UPDATE_FIELDS = ["title", "area", "description", "target_date", "status", "progress"]
 TASK_UPDATE_FIELDS = ["title", "area", "goal_id", "due_date", "priority", "done"]
+HABIT_UPDATE_FIELDS = ["title", "area", "goal_id", "frequency", "days", "times_per_week",
+                       "target_amount", "unit", "active"]
 
 
 def _pick(action: dict, fields: list[str]) -> dict:
@@ -110,6 +113,45 @@ def apply_actions(conn, actions: list[dict]) -> tuple[list[dict], list[str]]:
             else:
                 summary.append(f"Updated task “{after['title']}”")
 
+        elif kind == "create_habit":
+            fields = _pick(action, HABIT_UPDATE_FIELDS)
+            if action.get("link_to_new_goal") and last_new_goal_id:
+                fields["goal_id"] = last_new_goal_id
+            habit = habits.create_habit(conn, fields)
+            undo.append({"kind": "habit", "id": habit["id"], "before": None})
+            summary.append(f"Added routine “{habit['title']}” ({habit['schedule_text']})")
+
+        elif kind == "update_habit":
+            habit_id = _require(action, "habit_id", "routine")
+            before = habits.get_habit_row(conn, habit_id)
+            if before is None:
+                raise ValidationError(f"Routine #{habit_id} doesn't exist")
+            fields = _pick(action, HABIT_UPDATE_FIELDS)
+            if not fields:
+                continue
+            after = habits.update_habit(conn, habit_id, fields)
+            undo.append({"kind": "habit", "id": habit_id, "before": before})
+            if "active" in fields and len(fields) == 1:
+                summary.append(f"{'Resumed' if after['active'] else 'Paused'} routine “{after['title']}”")
+            else:
+                summary.append(f"Updated routine “{after['title']}” ({after['schedule_text']})")
+
+        elif kind == "log_habit":
+            habit_id = _require(action, "habit_id", "routine")
+            day = action.get("date")
+            if habits.get_habit_row(conn, habit_id) is None:
+                raise ValidationError(f"Routine #{habit_id} doesn't exist")
+            before = habits.get_log(conn, habit_id, (day or service.now_iso())[:10])
+            log = habits.log_habit(conn, habit_id, day, action.get("amount"), action.get("note") or "")
+            undo.append({"kind": "habit_log", "id": log["id"], "before": before})
+            h = habits.get_habit(conn, habit_id)
+            amount = ""
+            if h["target_amount"] and log["amount"] is not None:
+                amount = f" ({log['amount']:g} {h['unit'] or ''}".rstrip() + ")"
+            when = "" if log["date"] == service.now_iso()[:10] else f" on {log['date']}"
+            streak = f" · 🔥 {h['streak']} streak" if h["streak"] > 1 else ""
+            summary.append(f"Logged “{h['title']}”{amount}{when}{streak}")
+
         else:
             raise ValidationError(f"Unknown action '{kind}'")
 
@@ -131,7 +173,8 @@ def undo_command(conn, log_id: int) -> str:
     if row["undone"]:
         raise ValidationError("That command was already undone")
 
-    tables = {"goal": "goals", "task": "tasks", "note": "goal_notes"}
+    tables = {"goal": "goals", "task": "tasks", "note": "goal_notes",
+              "habit": "habits", "habit_log": "habit_logs"}
     # Undo in reverse order: the last change is reverted first.
     for change in reversed(json.loads(row["changes"])):
         table = tables[change["kind"]]

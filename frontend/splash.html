@@ -10,33 +10,37 @@
     to it as soon as it answers.
   -->
   <style>
-    :root { --bg: #f6f7fb; --text: #171a23; --text-2: #5b6272; --accent: #4f46e5; color-scheme: light; }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg: #0f1117; --text: #eceef4; --text-2: #a4abbb; --accent: #8b87ff; color-scheme: dark; }
-    }
+    :root { --bg: #070a12; --text: #e7ebf5; --text-2: #9ba5ba; --text-3: #636e86; color-scheme: dark; }
     html, body { height: 100%; margin: 0; }
     body {
-      background: var(--bg); color: var(--text); display: grid; place-items: center;
-      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg); color: var(--text); display: grid; place-items: center;
+      background-image:
+        radial-gradient(700px 500px at 20% 10%, rgba(99, 102, 241, .22), transparent 60%),
+        radial-gradient(600px 500px at 90% 90%, rgba(34, 211, 238, .14), transparent 60%),
+        linear-gradient(rgba(148, 163, 184, .05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, .05) 1px, transparent 1px);
+      background-size: auto, auto, 44px 44px, 44px 44px;
+      font: 15px/1.5 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
     .box { text-align: center; padding: 16px; }
-    img { width: 72px; height: 72px; border-radius: 18px; }
-    h1 { font-size: 20px; margin: 18px 0 6px; }
-    p { color: var(--text-2); margin: 0; }
-    .spinner {
-      width: 22px; height: 22px; margin: 22px auto 0; border-radius: 50%;
-      border: 3px solid color-mix(in srgb, var(--accent) 25%, transparent);
-      border-top-color: var(--accent); animation: spin 0.9s linear infinite;
+    .core {
+      width: 92px; height: 92px; margin: 0 auto; border-radius: 50%; position: relative;
+      background: conic-gradient(from 0deg, #22d3ee, #818cf8, #c084fc, #22d3ee);
+      animation: spin 2.4s linear infinite; box-shadow: 0 0 50px rgba(129, 140, 248, .5);
     }
+    .core::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--bg); }
+    .core-in { position: absolute; inset: 0; display: grid; place-items: center; z-index: 1; animation: spin 2.4s linear infinite reverse; }
+    .core-in img { width: 44px; height: 44px; border-radius: 12px; }
+    h1 { font: 650 20px/1.2 "Space Grotesk", "Inter", system-ui, sans-serif; margin: 24px 0 8px; letter-spacing: -.01em; }
+    p { color: var(--text-3); margin: 0; font: 500 11.5px/1.6 "JetBrains Mono", ui-monospace, Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
   <div class="box">
-    <img src="icon.png" alt="">
+    <div class="core" aria-hidden="true"><div class="core-in"><img src="icon.png" alt=""></div></div>
     <h1>Life Control Center</h1>
     <p id="status">Checking for updates…</p>
-    <div class="spinner" aria-hidden="true"></div>
   </div>
   <script>
     const APP = "http://localhost:8000";

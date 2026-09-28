@@ -32,6 +32,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Life Control Center", lifespan=lifespan)
 
+
+@app.middleware("http")
+async def always_fresh(request, call_next):
+    """Make the app window check for new page files every time.
+
+    Without this, the browser may keep showing a saved (cached) copy of the
+    old screens after an update. Files that haven't changed still load
+    instantly, because the browser just confirms its copy is current.
+    """
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
 for module in MODULES:
     app.include_router(module.router)
 

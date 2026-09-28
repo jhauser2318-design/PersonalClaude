@@ -12,6 +12,7 @@ from ..calendar import service as calendar
 from ..calendar.google import CalendarError
 from ..goals import service
 from ..habits import service as habits
+from ..shopping import service as shopping
 from ..goals.service import ValidationError
 from . import actions
 from .claude_client import AssistantError, ask_claude, build_context
@@ -51,7 +52,7 @@ async def run_command(body: CommandIn):
 
     with get_db() as conn:
         context = build_context(service.list_goals(conn), service.list_tasks(conn),
-                                habits.list_habits(conn), cal)
+                                habits.list_habits(conn), cal, shopping.list_items(conn))
 
     try:
         # Calling Claude takes a few seconds; run it off the main thread so the

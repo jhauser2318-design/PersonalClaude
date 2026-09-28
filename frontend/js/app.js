@@ -85,6 +85,8 @@ async function updateBadge() {
 // ===========================================================================
 
 const EXAMPLES = [
+  "Add AirPods Pro to my wants, $249",
+  "How much are my needs in total?",
   "What did Sarah say about the budget?",
   "Reply to Alex that Saturday dinner works",
   "Schedule CPA study tomorrow 7–9pm at the library",

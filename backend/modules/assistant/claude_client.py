@@ -18,7 +18,8 @@ from ...areas import AREAS
 AREA_ENUM = [a["id"] for a in AREAS]
 ACTION_TYPES = ["create_goal", "update_goal", "add_note", "create_task", "update_task", "complete_task",
                 "create_habit", "update_habit", "log_habit",
-                "create_event", "update_event", "delete_event"]
+                "create_event", "update_event", "delete_event",
+                "add_shopping_item", "update_shopping_item", "remove_shopping_item"]
 
 
 # Every action field is always present, with a "blank" value when it doesn't
@@ -32,6 +33,7 @@ BLANKS = {
     "done": "", "frequency": "", "days": [], "times_per_week": 0, "target_amount": 0, "unit": "",
     "amount": 0, "date": "", "active": "",
     "event_id": "", "start": "", "end": "", "location": "",
+    "item_id": 0, "category": "", "price": -1, "url": "",
 }
 YES_NO = {"yes": True, "no": False}
 
@@ -65,6 +67,10 @@ ACTION_SCHEMA = {
         "start": {"type": "string"},
         "end": {"type": "string"},
         "location": {"type": "string"},
+        "item_id": {"type": "integer"},
+        "category": {"type": "string", "enum": ["need", "want", ""]},
+        "price": {"type": "number"},
+        "url": {"type": "string"},
     },
     "additionalProperties": False,
 }
@@ -79,7 +85,7 @@ def normalize_action(action: dict) -> dict:
             value = YES_NO.get(value)
         elif key in BLANKS and value == BLANKS[key]:
             value = None
-        elif key == "progress" and isinstance(value, (int, float)) and value < 0:
+        elif key in ("progress", "price") and isinstance(value, (int, float)) and value < 0:
             value = None
         out[key] = value
     return out
@@ -119,10 +125,14 @@ Actions. Every field must be present in every action. For fields that don't appl
 - delete_event: event_id (required). Only when the user clearly asks to cancel or remove that specific event.
 
 4. intent "email": the request needs the user's email (Gmail): questions about emails ("what did Sarah say about the budget?", "any bills due?", "summarize my unread emails") or writing/replying/sending an email ("reply to Sarah that Thursday works", "email Alex about dinner"). Leave "actions" empty and put a very short note in "reply" ("Checking your email…"); a separate email assistant with Gmail access takes it from there.
+- add_shopping_item: something the user needs or wants to buy. title = item name (short, e.g. "AirPods Pro 2"); description = what it is / why, one short line (optional); category "need" (essentials, replacements, things required) or "want" (nice-to-haves); price in dollars as a plain number if known, else -1; url = product link if given, else "". If the user only gives a link, still add it: leave title "" and the app reads the name and price from the page.
+- update_shopping_item: item_id (required, from SHOPPING) plus only what changes: title, description, category, price, url, or done "yes" when they bought it ("I bought the running shoes") / "no" to put it back on the list.
+- remove_shopping_item: item_id (required). Only when the user clearly asks to remove/delete an item (not when they bought it; that's update_shopping_item with done "yes").
 
 Rules:
 - Events vs tasks vs routines: a thing with a time slot or that happens on a date is a calendar event; a to-do with a deadline is a task; a repeated habit is a routine. "Schedule", "book", "block time", "put on my calendar", "meeting/appointment at <time>" mean an event. If the calendar isn't connected, don't create events: reply (intent "answer") that Google Calendar needs to be connected on the Calendar page first, and offer to add it as a task instead.
 - For "when am I free" questions, read the CALENDAR list and answer with concrete free slots (intent "answer").
+- For shopping questions ("how much are my needs?", "what's on my wants list?"), answer from the SHOPPING list with totals (intent "answer").
 - Routines vs tasks: something repeated on a schedule ("every day", "3 times a week", "each morning") is a routine (create_habit). A one-off action is a task. When the user says they did something that matches a routine ("went to the gym", "did my skincare", "studied for the CPA 2 hours"), use log_habit, not a task or a goal note. If that routine is also linked to a goal, you may additionally add a short goal note only when the user describes real progress on the goal.
 - Use the IDs from the data provided. Match loosely by meaning ("my fitness goal" can match "Run a 5K" in Health; "the Spanish lesson task" matches a task mentioning Spanish lesson). If exactly one item is a clear match, use it.
 - When the user reports progress on a goal, add a note describing what they did (in their words, tidied up). Only change "progress" if they give a number or the update clearly moves a measurable goal forward; otherwise leave it -1. If the goal's status is not_started, also set status to in_progress with an update_goal action.
@@ -138,7 +148,7 @@ class AssistantError(Exception):
 
 
 def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | None = None,
-                  calendar: dict | None = None) -> str:
+                  calendar: dict | None = None, shopping: list[dict] | None = None) -> str:
     today = date.today()
     lines = [f"Today is {today.strftime('%A')}, {today.isoformat()}.", "", "GOALS (id | area | title | status | progress | target date | last update):"]
     if not goals:
@@ -187,6 +197,13 @@ def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | Non
         for e in calendar.get("events", []):
             lines.append(f"{e['id']} | {e['start']} | {e['end']}{' (all day)' if e['all_day'] else ''} | "
                          f"{e['title']} | {e['location'] or '-'}")
+    lines += ["", "SHOPPING (id | need/want | name | price | description | link | status):"]
+    if not shopping:
+        lines.append("(empty)")
+    for it in shopping or []:
+        price = f"${it['price']:,.2f}" if it["price"] is not None else "no price"
+        lines.append(f"#{it['id']} | {it['category']} | {it['name']} | {price} | {it['description'] or '-'} | "
+                     f"{it['url'] or '-'} | {'bought' if it['bought'] else 'to buy'}")
     return "\n".join(lines)
 
 

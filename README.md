@@ -10,10 +10,11 @@ A personal dashboard that runs on your own computer and opens in your web browse
 - **Routines**: recurring tasks such as the gym, skincare or CPA study. Each one runs every day, on chosen days, or N times a week, with an optional daily target (e.g. 2 hours). The app tracks streaks, best streaks, 30-day completion and a 12-week history grid.
 - **Calendar**: your **Google Calendar** inside the app. A week view of your events next to the tasks due each day; add, edit or delete events, and changes show up on your phone.
 - **Email**: ask the AI about your **Gmail** ("What did Sarah say about the budget?", "Any bills due?") and have it draft emails and replies. You always review a draft and click **Send** yourself.
+- **Shopping list**: things you **need** and **want**, each with what it is, its price and a link to the store. Totals for each, a "Bought" list, and paste-a-link to fill in the name and price.
 - **Dashboard**: a "command center" with a progress ring for each area, today's schedule, today's routines, what's due today and this week, overdue items, and an activity feed.
 - **Live command bar**: type normal sentences and Claude (Anthropic's AI) makes the changes for you. Every change can be undone.
 
-The sidebar already has spots for **Finances, Follow-ups and Shopping list**. They say "Coming soon" and will be built in later phases.
+The sidebar already has spots for **Finances and Follow-ups**. They say "Coming soon" and will be built in later phases.
 
 ---
 
@@ -127,6 +128,11 @@ The bar at the top is always visible. Press **/** anywhere to jump to it. Type a
 | `Cancel the team standup on Friday` | Removes that event from your calendar |
 | `When am I free this week for a 2-hour study block?` | Lists free slots from your calendar (no changes made) |
 | `Block Saturday morning for FAR practice and log 1 hour of CPA study` | Does both in one go |
+| `Add AirPods Pro to my wants, $249, for the gym` | Adds it under Wants with the price and a short description |
+| `Add this to my needs: https://store.com/desk-lamp` | Adds it from the link, reading the name and price from the page when the store allows it |
+| `Move the headphones to needs and change the price to $299` | Updates the item |
+| `I bought the running shoes` | Marks it bought (it moves to the Bought list) |
+| `How much are my wants in total?` | Answers from your list (no changes made) |
 | `What did Sarah say about the budget?` | Searches your Gmail, reads the relevant emails and answers (with links to them) |
 | `Do I have any bills due this month?` | Finds bill emails and lists amounts and due dates |
 | `Reply to Sarah that $48,500 works` | Drafts the reply and opens it for you to check. **Nothing is sent until you click Send.** |
@@ -141,6 +147,7 @@ If Claude isn't sure what you mean (for example, two goals could match), it **as
 - **Tasks** page: tick a checkbox to complete a task, or click a task to edit it. The pencil and bin icons edit and delete. Today's routines are listed at the top.
 - **Routines** page: click the big circle to check a routine off for today (click again to undo). Routines with a daily target have a box to log amounts (e.g. 1.5 hours now, 1 more hour later). The ⏸ button pauses a routine and the pencil edits or deletes it. The grid shows the last 12 weeks: bright = done, faded = partly done, red = missed.
 - **Calendar** page: a week at a time (‹ Today › to move between weeks). Click an event to edit or delete it, **+** on a day to add one, or **New event**. Tasks due that day are listed under the events.
+- **Shopping list** page: **Add item** (or **+** on Needs or Wants). Paste a store link and click **Fetch details** to fill in the name, description and price when the store allows it; some big stores such as Amazon block this, so type those yourself. Tick the box when you've bought something; click an item to edit it.
 - **Life areas** in the sidebar (Work, Health, …) show one area's progress, goals and tasks on a single page.
 - **Settings**: switch between light, dark and system themes, and manage the example data.
 
@@ -241,6 +248,7 @@ LifeControlCenter/
 │       ├── habits/          ← routines: schedules, logs, streaks
 │       ├── calendar/        ← Google sign-in (OAuth) and Calendar events
 │       ├── email/           ← Gmail: search, read, send; the email AI assistant
+│       ├── shopping/        ← shopping list (needs/wants) and reading product links
 │       └── assistant/       ← command bar: Claude prompt, JSON schema, apply + undo
 └── frontend/                ← what you see in the browser (plain HTML/CSS/JS, no build step)
     ├── index.html, styles.css

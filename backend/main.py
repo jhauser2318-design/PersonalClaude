@@ -6,6 +6,7 @@ then open http://localhost:8000 in your browser.
 """
 import importlib.util
 import json
+import mimetypes
 import os
 import subprocess
 import sys
@@ -14,13 +15,15 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 
 from . import config
 from .areas import AREAS
-from .database import get_db, init_db
+from .database import data_version, get_db, init_db
 from .modules import MODULES
+from .modules.remote import auth as remote_auth
 
 
 @asynccontextmanager
@@ -53,7 +56,28 @@ async def always_fresh(request, call_next):
     response = await call_next(request)
     if not request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-cache"
+    else:
+        response.headers["X-Data-Version"] = str(data_version())
     return response
+
+
+PC_ONLY_PAGES = ("/api/calendar/connect", "/api/calendar/oauth")
+
+
+@app.middleware("http")
+async def phone_sign_in(request, call_next):
+    """Requests from other devices (through Tailscale) need a signed-in device.
+    The app's own window on the PC never does."""
+    path = request.url.path
+    if remote_auth.is_remote(request.headers) and path.startswith("/api/") and not path.startswith("/api/auth/"):
+        if path.startswith(PC_ONLY_PAGES):
+            return HTMLResponse("<p style='font:16px system-ui;padding:24px'>Connecting Google only works on your PC: "
+                                "open the app there and click Connect.</p>", status_code=400)
+        with get_db() as conn:
+            signed_in = remote_auth.session(conn, request.cookies.get(remote_auth.COOKIE)) is not None
+        if not signed_in:
+            return JSONResponse({"detail": "Sign in with your passcode.", "code": "login"}, status_code=401)
+    return await call_next(request)
 
 for module in MODULES:
     app.include_router(module.router)
@@ -83,7 +107,7 @@ def app_info():
 def app_ping():
     RUNNING["last_ping"] = time.time()
     # Windows compare this with the version they loaded, and refresh if it changed.
-    return {"ok": True, "version": RUNNING["version"]}
+    return {"ok": True, "version": RUNNING["version"], "data_version": data_version()}
 
 
 def _load_updater():
@@ -146,6 +170,12 @@ def version_seen():
         config.VERSION_FILE.write_text(json.dumps(v, indent=2), encoding="utf-8")
     return {"ok": True}
 
+
+# Windows doesn't always know these file types; without them the phone
+# app's manifest and the QR-code script wouldn't load.
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 # Everything that isn't /api/... is the website itself (HTML, CSS, JS).
 app.mount("/", StaticFiles(directory=config.FRONTEND_DIR, html=True), name="frontend")

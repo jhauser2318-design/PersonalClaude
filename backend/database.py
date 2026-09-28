@@ -11,6 +11,15 @@ from .config import DATABASE_PATH
 
 _schemas: list[str] = []
 
+# Goes up by one every time anything is saved. Open windows (PC and phone)
+# compare it every few seconds and redraw when it changes, so every device
+# shows the same thing.
+_changes = {"n": 0}
+
+
+def data_version() -> int:
+    return _changes["n"]
+
 
 def register_schema(sql: str) -> None:
     _schemas.append(sql)
@@ -30,7 +39,10 @@ def get_db():
     conn = connect()
     try:
         yield conn
+        changed = conn.total_changes
         conn.commit()
+        if changed:
+            _changes["n"] += 1
     except Exception:
         conn.rollback()
         raise

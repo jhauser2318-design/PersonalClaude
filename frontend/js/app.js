@@ -1,5 +1,5 @@
 // Life Control Center: app startup, sidebar navigation, and the command bar.
-import { api } from "./api.js";
+import { api, sync } from "./api.js";
 import { icon } from "./icons.js";
 import { EXTRA_ROUTES, MODULES } from "./modules.js";
 import { setAreas, state } from "./state.js";
@@ -230,7 +230,47 @@ function setupCommandBar() {
 // Start
 // ===========================================================================
 
+// On the phone (through Tailscale): ask for the passcode once, then this
+// device is remembered for 90 days.
+let loginShown = false;
+function showLogin(hasPasscode = true) {
+  if (loginShown) return;
+  loginShown = true;
+  const box = document.createElement("div");
+  box.className = "login-screen";
+  box.innerHTML = `
+    <form class="login-card card" autocomplete="on">
+      <img src="icon.png" alt="" class="login-icon">
+      <h1>Life Control Center</h1>
+      ${hasPasscode ? `<p>Enter the passcode you set on your PC. This device will be remembered for 90 days.</p>
+        <input type="password" name="passcode" autocomplete="current-password" placeholder="Passcode" required aria-label="Passcode">
+        <button class="btn primary" type="submit">Unlock</button>
+        <p class="error-msg" hidden></p>`
+      : `<p>No passcode is set yet. On your PC, open <b>Settings → Phone &amp; devices</b> and set one, then reload this page.</p>`}
+    </form>`;
+  document.body.appendChild(box);
+  const form = box.querySelector("form");
+  form.passcode?.focus();
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = form.querySelector(".error-msg");
+    try {
+      await api.post("/auth/login", { passcode: form.passcode.value });
+      location.reload();
+    } catch (ex) { err.textContent = ex.message; err.hidden = false; form.passcode.select(); }
+  });
+}
+
+let remoteDevice = false;
+
 async function start() {
+  window.addEventListener("lcc:login-required", () => showLogin());
+  try {
+    const auth = await api.get("/auth/status");
+    remoteDevice = auth.remote;
+    document.documentElement.classList.toggle("is-remote", auth.remote);
+    if (auth.remote && !auth.signed_in) return showLogin(auth.has_passcode);
+  } catch (e) { /* older server or offline: carry on and show the usual messages */ }
   $("#menu-btn").innerHTML = icon("menu");
   $("#menu-btn").addEventListener("click", () => openMenu(true));
   $("#scrim").addEventListener("click", () => openMenu(false));
@@ -254,12 +294,25 @@ async function start() {
   keepAlive();
 }
 
-// Tell the app this window is still open (every 15 seconds). The desktop
-// launcher shuts the app down a few minutes after these check-ins stop.
+// Is it safe to redraw the page right now (nothing being typed or edited)?
+function quiet() {
+  const el = document.activeElement;
+  return document.visibilityState === "visible" && !document.querySelector("dialog[open]")
+    && !(el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))
+    && !$("#command-form").classList.contains("busy");
+}
+
+// Check in with the app every few seconds while this window is showing:
+//  - the desktop launcher shuts the app down a few minutes after check-ins
+//    stop (unless background mode is on),
+//  - if the app restarted on a new version, reload to show the new screens,
+//  - if something was saved on another device (or in the background), redraw.
 function keepAlive() {
   let failures = 0;
   let loadedVersion; // the app version this window was loaded from
+  let lastPing = 0;
   const ping = async () => {
+    lastPing = Date.now();
     try {
       const r = await api.post("/app/ping");
       failures = 0;
@@ -268,14 +321,26 @@ function keepAlive() {
         location.reload(); // the app restarted on a new version: show the new screens
         return;
       }
+      if (sync.known === null) sync.known = r.data_version;
+      else if (r.data_version !== sync.known && quiet()) {
+        sync.known = r.data_version;
+        state.refresh();
+      }
       if (!updateState.installing) $("#offline-notice").hidden = true;
     } catch (e) {
       failures += 1;
-      if (failures >= 2 && !updateState.installing) $("#offline-notice").hidden = false;
+      if (failures >= 2 && !updateState.installing) {
+        $("#offline-notice").textContent = remoteDevice
+          ? "Can't reach your PC right now. Check that it's on and awake, and that Tailscale is connected on this phone. This page reconnects by itself."
+          : "Life Control Center has stopped running. Close this window and open the app again from the Desktop icon.";
+        $("#offline-notice").hidden = false;
+      }
     }
   };
   ping();
-  setInterval(() => ping(), 15000);
+  // Every 5 seconds while visible; when hidden, just often enough to say "still open".
+  setInterval(() => { if (document.visibilityState === "visible" || Date.now() - lastPing > 14000) ping(); }, 5000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") ping(); });
   // While an update is installing, check more often so the refresh is quick.
   setInterval(() => { if (updateState.installing) ping(); }, 2000);
 }

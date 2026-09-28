@@ -48,3 +48,6 @@ venv/
 # SimpleFIN access link (read-only bank access) and the reminder check's log
 data/simplefin.json
 data/notifier.log
+
+# Background-mode switch (phone access)
+data/host.json

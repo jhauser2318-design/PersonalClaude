@@ -68,6 +68,19 @@ register_schema(
         category TEXT PRIMARY KEY,
         amount   REAL NOT NULL                   -- per month
     );
+    CREATE TABLE IF NOT EXISTS fin_rules (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        text       TEXT NOT NULL,                -- plain English, e.g. "Zelle to Mike is my rent: Housing"
+        enabled    INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS fin_balance_history (
+        date       TEXT NOT NULL,                -- YYYY-MM-DD
+        account_id TEXT NOT NULL,
+        balance    REAL NOT NULL,
+        PRIMARY KEY (date, account_id)
+    );
     """
 )
 
@@ -163,6 +176,10 @@ def store_sync(conn, accounts: list[dict]) -> dict:
                  acc.get("currency") or "USD", balance,
                  _num(available, None) if available not in (None, "") else None,
                  _to_date(acc.get("balance-date")), now))
+
+        # Remember each day's balance, for the Daily view's cash change.
+        conn.execute("INSERT OR REPLACE INTO fin_balance_history (date, account_id, balance) VALUES (?, ?, ?)",
+                     (_to_date(acc.get("balance-date")), acc_id, balance))
 
         # Pending transactions often get a new id once they post, so replace
         # this account's pending ones with the fresh list each time.
@@ -371,14 +388,17 @@ def set_merchant_category(conn, key: str, category: str, name: str | None = None
         (key, name, category, now_iso(), name))
 
 
-def uncategorized_merchants(conn, limit: int = 400) -> list[dict]:
-    """Merchants the AI hasn't sorted yet, with an example transaction each."""
+def uncategorized_merchants(conn, limit: int = 400, everything: bool = False, offset: int = 0) -> list[dict]:
+    """Merchants the AI hasn't sorted yet (or with everything=True, every merchant
+    the AI sorted, to re-sort them after your rules change), with an example each.
+    Merchants you categorized yourself are never included."""
+    where = "m.source != 'user'" if everything else "m.category IS NULL"
     rows = conn.execute(
-        """SELECT m.key, MIN(t.description) AS example, MIN(t.payee) AS payee, ROUND(AVG(t.amount), 2) AS amount,
-                  COUNT(*) AS n, MIN(a.kind) AS account_kind
-           FROM fin_merchants m JOIN fin_transactions t ON t.merchant_key = m.key
-           JOIN fin_accounts a ON a.id = t.account_id
-           WHERE m.category IS NULL GROUP BY m.key ORDER BY n DESC LIMIT ?""", (limit,)).fetchall()
+        f"""SELECT m.key, MIN(t.description) AS example, MIN(t.payee) AS payee, ROUND(AVG(t.amount), 2) AS amount,
+                   COUNT(*) AS n, MIN(a.kind) AS account_kind
+            FROM fin_merchants m JOIN fin_transactions t ON t.merchant_key = m.key
+            JOIN fin_accounts a ON a.id = t.account_id
+            WHERE {where} GROUP BY m.key ORDER BY n DESC, m.key LIMIT ? OFFSET ?""", (limit, offset)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -389,6 +409,50 @@ def save_ai_categories(conn, results: list[dict]):
                 "UPDATE fin_merchants SET category = ?, name = ?, source = 'ai', updated_at = ? "
                 "WHERE key = ? AND source != 'user'",
                 (r["category"], (r.get("name") or "")[:60], now_iso(), r["key"]))
+
+
+# ---------------------------------------------------------------------------
+# Your rules (plain English, followed by the AI)
+# ---------------------------------------------------------------------------
+
+def list_rules(conn) -> list[dict]:
+    return [dict(r) for r in conn.execute("SELECT * FROM fin_rules ORDER BY id")]
+
+
+def rules_text(conn) -> str:
+    """The enabled rules as a numbered list for the AI ("" if none)."""
+    rules = [r["text"] for r in list_rules(conn) if r["enabled"]]
+    return "\n".join(f"{i + 1}. {t}" for i, t in enumerate(rules))
+
+
+def _clean_rule(text: str) -> str:
+    text = " ".join((text or "").split())
+    if len(text) < 3:
+        raise ValidationError("Write the rule in a few words, e.g. “Zelle payments to Mike are my rent (Housing)”.")
+    if len(text) > 500:
+        raise ValidationError("Keep a rule under 500 characters. Split long ones into several rules.")
+    return text
+
+
+def add_rule(conn, text: str) -> dict:
+    ts = now_iso()
+    cur = conn.execute("INSERT INTO fin_rules (text, enabled, created_at, updated_at) VALUES (?, 1, ?, ?)",
+                       (_clean_rule(text), ts, ts))
+    return dict(conn.execute("SELECT * FROM fin_rules WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def update_rule(conn, rule_id: int, text: str | None = None, enabled: bool | None = None) -> dict:
+    if not conn.execute("SELECT 1 FROM fin_rules WHERE id = ?", (rule_id,)).fetchone():
+        raise ValidationError("That rule doesn't exist.")
+    if text is not None:
+        conn.execute("UPDATE fin_rules SET text = ?, updated_at = ? WHERE id = ?", (_clean_rule(text), now_iso(), rule_id))
+    if enabled is not None:
+        conn.execute("UPDATE fin_rules SET enabled = ?, updated_at = ? WHERE id = ?", (int(enabled), now_iso(), rule_id))
+    return dict(conn.execute("SELECT * FROM fin_rules WHERE id = ?", (rule_id,)).fetchone())
+
+
+def delete_rule(conn, rule_id: int) -> None:
+    conn.execute("DELETE FROM fin_rules WHERE id = ?", (rule_id,))
 
 
 # ---------------------------------------------------------------------------
@@ -570,6 +634,73 @@ def recurring(conn) -> list[dict]:
             "last_date": latest["posted"], "next_date": next_date.isoformat(), "times": len(similar),
         })
     return sorted(out, key=lambda r: -r["amount"])
+
+
+def daily_series(conn, end: str, days: int = 30) -> list[dict]:
+    """Income, spending and net for each of the `days` days ending on `end`."""
+    last = date.fromisoformat(end)
+    first = last - timedelta(days=days - 1)
+    rows = conn.execute(
+        f"""SELECT t.posted AS d,
+                   COALESCE(SUM(CASE WHEN {EFFECTIVE} = 'Income' THEN t.amount END), 0) AS income,
+                   COALESCE(-SUM(CASE WHEN {EFFECTIVE} NOT IN ('Income', 'Transfer') THEN t.amount END), 0) AS spending,
+                   COUNT(*) AS n
+            FROM fin_transactions t LEFT JOIN fin_merchants m ON m.key = t.merchant_key
+            JOIN fin_accounts a ON a.id = t.account_id
+            WHERE a.hidden = 0 AND t.posted BETWEEN ? AND ? GROUP BY t.posted""",
+        (first.isoformat(), last.isoformat())).fetchall()
+    by_day = {r["d"]: r for r in rows}
+    out = []
+    for i in range(days):
+        d = (first + timedelta(days=i)).isoformat()
+        r = by_day.get(d)
+        income, spending = (round(r["income"], 2), round(r["spending"], 2)) if r else (0.0, 0.0)
+        out.append({"date": d, "income": income, "spending": spending, "net": round(income - spending, 2),
+                    "count": r["n"] if r else 0})
+    return out
+
+
+def cash_change(conn, day: str) -> dict | None:
+    """How your cash (checking + savings) moved on a day, from the saved daily balances."""
+    def cash_on(d):
+        rows = conn.execute(
+            """SELECT h.account_id, h.balance FROM fin_balance_history h JOIN fin_accounts a ON a.id = h.account_id
+               WHERE a.hidden = 0 AND a.kind != 'credit' AND h.date = (
+                 SELECT MAX(h2.date) FROM fin_balance_history h2 WHERE h2.account_id = h.account_id AND h2.date <= ?)""",
+            (d,)).fetchall()
+        return round(sum(r["balance"] for r in rows), 2) if rows else None
+    end = cash_on(day)
+    start = cash_on((date.fromisoformat(day) - timedelta(days=1)).isoformat())
+    if end is None or start is None:
+        return None
+    return {"start": start, "end": end, "change": round(end - start, 2)}
+
+
+def day_summary(conn, day: str | None = None) -> dict:
+    """Everything for the Daily view: the day's money in and out, what it went on,
+    how it compares with a normal day, and the month so far."""
+    day = day or (date.today() - timedelta(days=1)).isoformat()
+    try:
+        d = date.fromisoformat(day)
+    except ValueError:
+        raise ValidationError("Pick a date like 2026-09-27.")
+    series = daily_series(conn, day, 30)
+    before = [r for r in series if r["date"] < day]
+    avg_spend = round(sum(r["spending"] for r in before) / len(before), 2) if before else 0.0
+    month_start = d.replace(day=1).isoformat()
+    txs = list_transactions(conn, start=day, end=day, limit=500)
+    return {
+        "date": day,
+        **totals(conn, day, day),
+        "avg_daily_spending": avg_spend,
+        "categories": spending_by_category(conn, day, day),
+        "income_items": [t for t in txs if t["category"] == "Income"],
+        "transactions": txs,
+        "month_to_date": {**totals(conn, month_start, day), "days": d.day},
+        "cash": cash_change(conn, day),
+        "series": series,
+        "first_date": conn.execute("SELECT MIN(posted) AS d FROM fin_transactions").fetchone()["d"],
+    }
 
 
 def overview(conn) -> dict:

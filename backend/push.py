@@ -159,52 +159,115 @@ def devices(conn) -> list[dict]:
 # Sending
 # ---------------------------------------------------------------------------
 
-def _post(endpoint: str, body: bytes, headers: dict) -> int:
+def _post(endpoint: str, body: bytes, headers: dict) -> tuple[int, str]:
+    """POST to the push service. Returns (status, the service's reason text if it refused)."""
     req = urllib.request.Request(endpoint, data=body, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=15) as res:
-            return res.status
+        with urllib.request.urlopen(req, timeout=20) as res:
+            return res.status, ""
     except urllib.error.HTTPError as e:
-        return e.code
+        try:
+            text = e.read().decode("utf-8", "replace")[:300]
+            reason = json.loads(text).get("reason", text) if text.startswith("{") else text
+        except Exception:  # noqa: BLE001
+            reason = ""
+        return e.code, str(reason).strip()
+
+
+def explain(status: int, reason: str) -> str:
+    """A plain-English reason a push didn't go through."""
+    r = (reason or "").lower()
+    if status == 0:
+        return (f"The PC couldn't reach Apple's push service ({reason}). Check the PC's internet connection, "
+                "and that antivirus or a firewall isn't blocking Python from web.push.apple.com.")
+    if "badjwttoken" in r or "expiredjwt" in r or status == 403:
+        return (f"Apple refused the app's sign-in (403 {reason}). This usually means the PC's clock is off: "
+                "check the date, time and time zone in Windows settings, then send a test again.")
+    if status in (404, 410) or "unregistered" in r or "expired" in r:
+        return "This phone's notification sign-up was no longer valid. On the phone, tap Turn on again."
+    if status == 413:
+        return "The notification was too big for Apple."
+    if status == 429 or "toomany" in r:
+        return "Apple says too many notifications were sent. Try again in a few minutes."
+    return f"Apple's push service said {status} {reason}".strip()
 
 
 def send_all(conn, messages: list[dict], poster=None, endpoint: str | None = None) -> int:
     """Send each message ({title, body, url, tag, urgent, badge}) to every phone (or just the one
     with `endpoint`). Returns how many pushes the push service accepted."""
+    return send_report(conn, messages, poster, endpoint)["sent"]
+
+
+def send_report(conn, messages: list[dict], poster=None, endpoint: str | None = None) -> dict:
+    """Like send_all, but also says why anything failed: {"sent", "phones", "errors": [...]}."""
     subs = [dict(r) for r in conn.execute("SELECT * FROM push_subscriptions ORDER BY id")] if devices(conn) else []
     if endpoint:
         subs = [s for s in subs if s["endpoint"] == endpoint]
+    out = {"sent": 0, "phones": len(subs), "errors": []}
     if not subs or not messages:
-        return 0
+        return out
     poster = poster or _post
     private, public = _keys(conn)
-    sent = 0
     for s in subs:
         for m in messages:
             payload = json.dumps({k: m[k] for k in ("title", "body", "url", "tag", "badge") if m.get(k) is not None}).encode()
             try:
                 body = encrypt(payload, s["p256dh"], s["auth"])
-                status = poster(s["endpoint"], body, {
+                res = poster(s["endpoint"], body, {
                     "Authorization": _vapid_header(private, public, s["endpoint"]),
                     "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream",
                     "TTL": str(TTL), "Urgency": "high" if m.get("urgent") else "normal",
                 })
+                status, reason = res if isinstance(res, tuple) else (res, "")
             except Exception as e:  # noqa: BLE001 (no internet, bad keys...): try again next time
-                status, err = 0, str(e)[:200]
-            else:
-                err = f"push service said {status}"
+                status, reason = 0, str(e)[:200]
             now = datetime.now().isoformat(timespec="seconds")
             if 200 <= status < 300:
-                sent += 1
+                out["sent"] += 1
                 conn.execute("UPDATE push_subscriptions SET last_ok = ?, fails = 0, last_error = NULL WHERE id = ?",
                              (now, s["id"]))
-            elif status in (404, 410):  # the phone unsubscribed or was reset: forget it
+                continue
+            err = explain(status, reason)
+            out["errors"].append({"phone": s["label"], "status": status, "reason": reason, "message": err})
+            log.warning("Push to %s failed: %s %s", s["label"], status, reason)
+            if status in (404, 410):  # the phone unsubscribed or was reset: forget it
                 conn.execute("DELETE FROM push_subscriptions WHERE id = ?", (s["id"],))
-                break
             else:
-                log.warning("Push to %s failed: %s", s["label"], err)
-                conn.execute("UPDATE push_subscriptions SET fails = fails + 1, last_error = ? WHERE id = ?", (err, s["id"]))
+                conn.execute("UPDATE push_subscriptions SET fails = fails + 1, last_error = ? WHERE id = ?",
+                             (f"{now[:16].replace('T', ' ')}: {err}", s["id"]))
                 conn.execute("DELETE FROM push_subscriptions WHERE id = ? AND fails >= ?", (s["id"], MAX_FAILS))
-                break
+            break
     conn.commit()
-    return sent
+    return out
+
+
+def ready() -> str | None:
+    """None if phone notifications can be sent from this PC, else what's missing."""
+    try:
+        import cryptography  # noqa: F401
+        from cryptography.hazmat.primitives.asymmetric import ec
+        ec.generate_private_key(ec.SECP256R1())
+        return None
+    except Exception as e:  # noqa: BLE001
+        return f"A piece the app needs for phone notifications (the “cryptography” package) isn't working on this PC: {e}"
+
+
+def install_missing() -> bool:
+    """Try to install the cryptography package (same as the updater does). Returns True if it now works."""
+    import subprocess
+    import sys
+    from pathlib import Path
+    python = Path(sys.executable).with_name("python.exe")
+    if not python.is_file():
+        python = Path(sys.executable)
+    try:
+        result = subprocess.run([str(python), "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
+                                 "cryptography>=42"], capture_output=True, text=True, timeout=600,
+                                creationflags=0x08000000 if os.name == "nt" else 0)
+        if result.returncode != 0:
+            log.warning("Installing cryptography failed: %s", (result.stderr or result.stdout)[-800:])
+    except Exception as e:  # noqa: BLE001
+        log.warning("Installing cryptography failed: %s", e)
+    import importlib
+    importlib.invalidate_caches()
+    return ready() is None

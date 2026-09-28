@@ -1226,3 +1226,10 @@ input[type=range] { width: 100%; accent-color: var(--area, var(--accent)); }
 .fu-channel .fin-list li { padding: 7px 0; }
 .push-offer { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
 @media (max-width: 700px) { .fu-channels { grid-template-columns: 1fr; } }
+.push-diag { margin: 8px 0 10px; font-size: 13px; }
+.push-diag summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.push-diag ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.push-diag li { display: flex; gap: 8px; align-items: flex-start; }
+.push-diag li.ok b { color: var(--success); }
+.push-diag li.bad b { color: var(--danger); }
+.push-diag small { color: var(--text-3); }

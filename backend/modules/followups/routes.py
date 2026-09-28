@@ -185,10 +185,34 @@ def _push_run(fn, *args):
         return fn(conn, *args)
 
 
+REPAIR = {"running": False}
+
+
+def _repair_in_background() -> None:
+    """If the package phone notifications need is missing, install it (once at a time)."""
+    import threading
+    if REPAIR["running"]:
+        return
+    REPAIR["running"] = True
+
+    def run():
+        try:
+            push.install_missing()
+        finally:
+            REPAIR["running"] = False
+    threading.Thread(target=run, daemon=True).start()
+
+
 @router.get("/push/status")
 def push_status():
+    problem = push.ready()
+    if problem:
+        _repair_in_background()
+        with get_db(real=True) as conn:
+            return {"key": None, "devices": push.devices(conn), "problem": problem, "repairing": REPAIR["running"],
+                    "enabled": service.get_settings(conn)["notify_enabled"] == "1", "background": background_status()}
     def work(conn):
-        return {"key": push.public_key(conn), "devices": push.devices(conn),
+        return {"key": push.public_key(conn), "devices": push.devices(conn), "problem": None,
                 "enabled": service.get_settings(conn)["notify_enabled"] == "1"}
     data = _push_run(work)
     data["background"] = background_status()
@@ -197,6 +221,10 @@ def push_status():
 
 @router.post("/push/subscribe")
 async def push_subscribe(body: SubscribeIn):
+    if push.ready():
+        _repair_in_background()
+        raise HTTPException(status_code=503, detail="Your PC is still installing a piece it needs for phone notifications. "
+                                                    "Wait a minute, then tap Turn on again.")
     try:
         device = _push_run(push.subscribe, body.subscription, body.label)
     except ValueError as e:
@@ -210,24 +238,31 @@ async def push_subscribe(body: SubscribeIn):
         background = None if installed is None else True
     except (RuntimeError, OSError):
         background = False
-    sent = await run_in_threadpool(_send_test, body.subscription.get("endpoint"))
-    return {"device": device, "background": background, "test_sent": sent}
+    report = await run_in_threadpool(_send_test, body.subscription.get("endpoint"))
+    return {"device": device, "background": background, "test_sent": report["sent"],
+            "test_error": report["errors"][0]["message"] if report["errors"] else None}
 
 
-def _send_test(endpoint: str | None = None) -> int:
+def _send_test(endpoint: str | None = None) -> dict:
     msg = [{"title": "🔔 Phone notifications are on", "body": "Reminders will show up here, even when the app is closed.",
             "url": "/#/followups", "tag": "test", "urgent": True}]
     with get_db(real=True) as conn:
-        return push.send_all(conn, msg, endpoint=endpoint)
+        return push.send_report(conn, msg, endpoint=endpoint)
 
 
 @router.post("/push/test")
 async def push_test(body: EndpointIn):
-    sent = await run_in_threadpool(_send_test, body.endpoint)
-    if not sent:
-        raise HTTPException(status_code=400, detail="The test didn't go through. Check that your PC is online, "
-                                                    "then turn phone notifications off and on again on the phone.")
-    return {"sent": sent}
+    problem = push.ready()
+    if problem:
+        _repair_in_background()
+        raise HTTPException(status_code=503, detail=problem + " The app is installing it now; try again in a minute.")
+    report = await run_in_threadpool(_send_test, body.endpoint)
+    if report["phones"] == 0:
+        raise HTTPException(status_code=400, detail="Your PC doesn't have this phone on its list. On the phone, tap "
+                                                    "Turn off here, then Turn on for this phone.")
+    if not report["sent"]:
+        raise HTTPException(status_code=400, detail=report["errors"][0]["message"] if report["errors"] else "The test didn't go through.")
+    return {"sent": report["sent"]}
 
 
 @router.post("/push/unsubscribe")

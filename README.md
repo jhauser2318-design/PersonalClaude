@@ -181,7 +181,7 @@ If Claude isn't sure what you mean (for example, two goals could match), it **as
 - **Weekly review** (Plan): the week's numbers across the app, what went well / what to change, next week's top 3 priorities (one click makes them tasks), and an optional AI summary. A reminder pops up Sunday at 6pm.
 - **People** (Life): birthdays, when you last talked, and “reach out every N days” nudges. “Called Mom about the trip” logs it.
 - **Fun** (Life): a log of fun things you did (how fun, who with, where, what it cost) and a list of ideas for next time; check an idea off and it's logged. The AI bar understands “Went bowling with Sam last night, so fun” and “I want to try axe throwing”.
-- **Home maintenance** (under Health in the sidebar): upkeep that repeats (HVAC filter, oil change) with the next due date, and important dates and documents (passport, registration, insurance) with a heads-up ahead of time.
+- **Home maintenance** (under Health in the sidebar): one-time jobs (fix the leaky faucet, with an optional due date) and upkeep that repeats (HVAC filter, oil change) with the next due date, and important dates and documents (passport, registration, insurance) with a heads-up ahead of time.
 - **Finances → Bills**: a month calendar of bills (found from your transactions, your loans, and ones you add), a subscriptions list with the yearly cost of each and a “cancel it” list. A reminder comes 2 days before each bill.
 - **Finances → Savings**: savings goals with the monthly amount needed to hit each target date; link one to a savings account and it updates with every sync.
 

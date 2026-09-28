@@ -178,7 +178,7 @@ def today():
         def home():
             from ..home import service as hm
             for it in hm.list_maintenance(conn):
-                if it["status"] == "overdue" or (it["due_in"] is not None and it["due_in"] <= 3):
+                if it["status"] != "done" and (it["status"] == "overdue" or (it["due_in"] is not None and it["due_in"] <= 3)):
                     heads.append({"icon": "🔧", "text": f"{it['name']}: " + ("overdue" if it["due_in"] < 0 else "due today" if it["due_in"] == 0 else f"due in {it['due_in']} days"), "link": "home"})
             for d in hm.list_dates(conn):
                 if d["status"] in ("expired", "soon"):

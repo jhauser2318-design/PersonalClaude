@@ -9,6 +9,8 @@ const KIND_ICON = { document: "📄", insurance: "🛡", warranty: "🧾", renew
 let tab = "upkeep";
 
 function dueText(it) {
+  if (it.one_time && it.last_done) return `Done ${fmtDate(it.last_done)}`;
+  if (it.one_time && it.due_in == null) return "No due date";
   if (it.due_in == null) return "Never logged";
   if (it.due_in < 0) return `Overdue by ${-it.due_in} day${it.due_in === -1 ? "" : "s"}`;
   if (it.due_in === 0) return "Due today";
@@ -20,28 +22,48 @@ function dateText(d) {
   if (d.days_left === 0) return "Today";
   return `${new Date(`${d.date}T12:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} · in ${d.days_left} days`;
 }
-const statusDot = { overdue: "var(--danger)", expired: "var(--danger)", soon: "var(--warning)", never: "var(--text-3)", ok: "var(--success)", done: "var(--text-3)" };
+const statusDot = { todo: "var(--accent)", overdue: "var(--danger)", expired: "var(--danger)", soon: "var(--warning)", never: "var(--text-3)", ok: "var(--success)", done: "var(--text-3)" };
 
 export async function render(view, arg) {
   if (arg === "dates" || arg === "upkeep") tab = arg;
   const o = await api.get("/home");
+  const jobs = o.maintenance.filter((i) => i.one_time && !i.last_done);
+  const doneJobs = o.maintenance.filter((i) => i.one_time && i.last_done);
+  const upkeep = o.maintenance.filter((i) => !i.one_time);
   view.innerHTML = `<div id="home-root">
     <div class="page-head"><div>
       <div class="eyebrow"><a href="#/area/health" class="crumb">Health</a> · home &amp; upkeep</div>
       <h1>Home maintenance</h1>
       <div class="status-chips">
         ${o.attention ? `<span class="status-chip"><span class="dot" style="--c:var(--warning)"></span><b>${o.attention}</b> need attention</span>` : `<span class="status-chip"><span class="dot" style="--c:var(--success)"></span>all good</span>`}
-        <span class="status-chip"><span class="dot" style="--c:var(--accent)"></span><b>${o.maintenance.length}</b> upkeep items</span>
+        ${jobs.length ? `<span class="status-chip"><span class="dot" style="--c:var(--accent-2)"></span><b>${jobs.length}</b> one-time job${jobs.length === 1 ? "" : "s"} to do</span>` : ""}
+        <span class="status-chip"><span class="dot" style="--c:var(--accent)"></span><b>${upkeep.length}</b> repeating</span>
         <span class="status-chip"><span class="dot" style="--c:#c084fc"></span><b>${o.dates.filter((d) => !d.done).length}</b> dates tracked</span>
       </div></div>
-      <button class="btn primary" id="hm-add">${icon("plus")} ${tab === "upkeep" ? "Add upkeep item" : "Add date"}</button></div>
+      <div class="btn-row">${tab === "upkeep" ? `<button class="btn" id="hm-add-job">${icon("plus")} One-time job</button>
+        <button class="btn primary" id="hm-add">${icon("repeat")} Repeating upkeep</button>` : `<button class="btn primary" id="hm-add">${icon("plus")} Add date</button>`}</div></div>
     <div class="segmented fin-tabs" role="tablist">
-      <button data-tab="upkeep" class="${tab === "upkeep" ? "active" : ""}">Upkeep</button>
+      <button data-tab="upkeep" class="${tab === "upkeep" ? "active" : ""}">Maintenance</button>
       <button data-tab="dates" class="${tab === "dates" ? "active" : ""}">Important dates &amp; documents</button>
     </div>
     ${tab === "upkeep" ? `
-      <p class="sub" style="margin:0 0 14px;color:var(--text-3)">Things that need doing every so often. Mark one done and the next due date moves forward; you get a heads-up 3 days before.</p>
-      ${o.maintenance.length ? `<div class="home-grid">${o.maintenance.map((it) => `
+      <section class="card fin-card" style="margin-bottom:18px">
+        <header><h2>One-time jobs</h2><span class="eyebrow">fix, replace, install…</span></header>
+        ${jobs.length ? `<ul class="fin-list">${jobs.map((it) => `
+          <li class="job-row" data-item="${it.id}"><input type="checkbox" class="job-check" data-job="${it.id}" aria-label="Mark “${esc(it.name)}” done">
+            <span class="hi-icon">${CAT_ICON[it.category]}</span>
+            <div><div class="fin-li-title">${esc(it.name)}</div>
+              <div class="fin-li-sub"><span class="dot" style="--c:${statusDot[it.status]}"></span> ${esc(dueText(it))}${it.notes ? ` · ${esc(it.notes)}` : ""}</div></div>
+            <button class="icon-btn" data-edit="${it.id}" aria-label="Edit">${icon("edit")}</button></li>`).join("")}</ul>`
+          : `<div class="empty" style="padding:12px">No one-time jobs. Add things like “Fix the leaky faucet” or “Replace the garage door opener”.</div>`}
+        ${doneJobs.length ? `<details class="job-done"><summary>Done <span class="count">${doneJobs.length}</span></summary><ul class="fin-list">${doneJobs.map((it) => `
+          <li><input type="checkbox" class="job-check" data-reopen="${it.id}" checked aria-label="Reopen “${esc(it.name)}”">
+            <div><div class="fin-li-title">${esc(it.name)}</div><div class="fin-li-sub">${esc(dueText(it))}${it.log[0]?.cost ? ` · $${it.log[0].cost}` : ""}</div></div>
+            <button class="icon-btn" data-edit="${it.id}" aria-label="Edit">${icon("edit")}</button></li>`).join("")}</ul></details>` : ""}
+      </section>
+      <h2 class="section">Repeating upkeep <span class="count">${upkeep.length}</span><span class="line"></span></h2>
+      <p class="sub" style="margin:-4px 0 14px;color:var(--text-3)">Things that need doing every so often. Mark one done and the next due date moves forward; you get a heads-up 3 days before.</p>
+      ${upkeep.length ? `<div class="home-grid">${upkeep.map((it) => `
         <section class="card home-item ${it.status}" data-item="${it.id}">
           <div class="hi-top"><span class="hi-icon">${CAT_ICON[it.category]}</span>
             <div class="hi-main"><div class="fin-li-title">${esc(it.name)}</div><div class="fin-li-sub">${esc(it.every_text)}${it.last_done ? ` · last ${esc(fmtDate(it.last_done))}` : ""}</div></div>
@@ -64,6 +86,18 @@ export async function render(view, arg) {
   const refresh = () => render(view);
   root.querySelector(".fin-tabs").onclick = (e) => { const b = e.target.closest("[data-tab]"); if (b) { tab = b.dataset.tab; refresh(); } };
   root.querySelector("#hm-add").onclick = () => (tab === "upkeep" ? openItem({}, o, refresh) : openDate({}, o, refresh));
+  root.querySelector("#hm-add-job")?.addEventListener("click", () => openItem({ one_time: 1 }, o, refresh));
+  root.addEventListener("change", async (e) => {
+    if (e.target.dataset.job) {
+      await api.post(`/home/maintenance/${e.target.dataset.job}/done`, {});
+      toast("Done ✓");
+      refresh();
+    } else if (e.target.dataset.reopen) {
+      await api.post(`/home/maintenance/${e.target.dataset.reopen}/reopen`);
+      toast("Reopened");
+      refresh();
+    }
+  });
   root.addEventListener("click", async (e) => {
     const done = e.target.closest("[data-done]");
     if (done) {
@@ -80,19 +114,23 @@ export async function render(view, arg) {
 
 function openItem(it, o, onChange) {
   const isNew = !it.id;
+  let oneTime = !!it.one_time;
   const dlg = openDialog({
-    title: isNew ? "New upkeep item" : esc(it.name), style: "--area:var(--accent)",
+    title: isNew ? (oneTime ? "New one-time job" : "New repeating upkeep") : esc(it.name), style: "--area:var(--accent)",
     body: `<form id="hi-form" class="dlg-body" style="padding:0">
       <div class="row">
-        <label class="field"><span>What</span><input type="text" name="name" required value="${esc(it.name || "")}" placeholder="e.g. Change HVAC filter"></label>
+        <label class="field"><span>What</span><input type="text" name="name" required value="${esc(it.name || "")}" placeholder="${oneTime ? "e.g. Fix the leaky faucet" : "e.g. Change HVAC filter"}"></label>
         <label class="field"><span>Category</span><select name="category">${o.categories.map((c) => `<option value="${c}" ${c === it.category ? "selected" : ""}>${CAT_ICON[c]} ${c}</option>`).join("")}</select></label>
       </div>
-      <div class="row">
+      <div class="field"><span>Type</span><div class="segmented" id="hi-type">
+        <button type="button" data-t="once">One-time job</button><button type="button" data-t="repeat">Repeats</button></div></div>
+      <label class="field" data-once><span>Due by (optional)</span><input type="date" name="due_date" value="${esc(it.due_date || "")}"></label>
+      <div class="row" data-repeat>
         <label class="field"><span>Every</span><input type="number" name="every_n" min="1" required value="${it.every_n || 3}"></label>
         <label class="field"><span>&nbsp;</span><select name="every_unit">${o.units.map((u) => `<option ${u === (it.every_unit || "months") ? "selected" : ""}>${u}</option>`).join("")}</select></label>
       </div>
-      <label class="field"><span>Last done</span><input type="date" name="last_done" value="${esc(it.last_done || "")}"></label>
-      <label class="field"><span>Notes</span><input type="text" name="notes" value="${esc(it.notes || "")}" placeholder="e.g. 16x25x1 filter, MERV 8"></label>
+      <label class="field" data-repeat><span>Last done</span><input type="date" name="last_done" value="${esc(it.last_done || "")}"></label>
+      <label class="field"><span>Notes</span><input type="text" name="notes" value="${esc(it.notes || "")}" placeholder="Details, part numbers, who to call…"></label>
       ${it.log?.length ? `<div class="field"><span>History</span><ul class="fin-list">${it.log.map((l) => `
         <li><div><div class="fin-li-title">${esc(fmtDate(l.date))}${l.cost ? ` · $${l.cost}` : ""}</div>${l.note ? `<div class="fin-li-sub">${esc(l.note)}</div>` : ""}</div>
         <button type="button" class="icon-btn danger" data-del-log="${l.id}" aria-label="Delete">${icon("x")}</button></li>`).join("")}</ul></div>` : ""}
@@ -104,6 +142,13 @@ function openItem(it, o, onChange) {
       <div class="right"><button class="btn" data-close>Cancel</button><button class="btn primary" type="submit" form="hi-form">Save</button></div>`,
   });
   const form = dlg.querySelector("form");
+  const showType = () => {
+    dlg.querySelectorAll("#hi-type button").forEach((b) => b.classList.toggle("active", (b.dataset.t === "once") === oneTime));
+    dlg.querySelectorAll("[data-once]").forEach((el) => { el.hidden = !oneTime; });
+    dlg.querySelectorAll("[data-repeat]").forEach((el) => { el.hidden = oneTime; });
+  };
+  dlg.querySelector("#hi-type").onclick = (e) => { const b = e.target.closest("[data-t]"); if (b) { oneTime = b.dataset.t === "once"; showType(); } };
+  showType();
   form.addEventListener("click", async (e) => {
     const del = e.target.closest("[data-del-log]");
     if (del) { await api.del(`/home/maintenance/log/${del.dataset.delLog}`); del.closest("li").remove(); onChange(); }
@@ -122,8 +167,9 @@ function openItem(it, o, onChange) {
   });
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const body = { name: form.name.value, category: form.category.value, every_n: Number(form.every_n.value),
-      every_unit: form.every_unit.value, last_done: form.last_done.value || null, notes: form.notes.value };
+    const body = { name: form.name.value, category: form.category.value, every_n: Number(form.every_n.value || 1),
+      every_unit: form.every_unit.value, last_done: oneTime ? (it.last_done || null) : (form.last_done.value || null),
+      notes: form.notes.value, one_time: oneTime, due_date: oneTime ? (form.due_date.value || null) : null };
     try {
       if (isNew) await api.post("/home/maintenance", body);
       else await api.patch(`/home/maintenance/${it.id}`, body);

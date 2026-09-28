@@ -192,8 +192,11 @@ def update() -> dict:
         python = Path(sys.executable).with_name("python.exe")
         if not python.is_file():
             python = Path(sys.executable)
-        subprocess.run([str(python), "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
-                        "-r", str(ROOT / "requirements.txt")], creationflags=NO_WINDOW, timeout=900)
+        pip = subprocess.run([str(python), "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
+                              "-r", str(ROOT / "requirements.txt")], creationflags=NO_WINDOW, timeout=900,
+                             capture_output=True, text=True)
+        if pip.returncode != 0:  # the app retries missing pieces itself; keep the details for troubleshooting
+            logging.warning("Installing packages failed: %s", (pip.stderr or pip.stdout)[-1500:])
 
     _write_version({
         "sha": latest,

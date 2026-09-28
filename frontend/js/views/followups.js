@@ -2,7 +2,7 @@
 // every upcoming reminder, and the desktop-notification switch.
 import { api } from "../api.js";
 import { icon } from "../icons.js";
-import { deviceState, disablePush, enablePush, testPush } from "../push.js";
+import { deviceState, diagnose, disablePush, enablePush, testPush } from "../push.js";
 import { dueState, esc, fmtDate, fmtDateTime, openDialog, showError, toast } from "../ui.js";
 
 const KIND_LABEL = { task: "Task", routine: "Routine", followup: "Follow-up" };
@@ -49,7 +49,7 @@ function column(kind, items) {
     </section>`;
 }
 
-function notifyCard(n, ph, dev) {
+function notifyCard(n, ph, dev, checks = []) {
   const bg = n.background;
   const on = n.settings.notify_enabled === "1";
   const desktop = n.settings.notify_desktop !== "0";
@@ -84,6 +84,9 @@ function notifyCard(n, ph, dev) {
                 <button class="btn small" id="p-test">Send a test</button><button class="btn small" id="p-off">Turn off here</button></div>`
             : `<div class="btn-row" style="margin:8px 0"><button class="btn primary small" id="p-on">${icon("bell")} Turn on for this phone</button></div>`)
             : `<p class="muted small" style="margin:6px 0">To add a phone: open the app from its Home Screen icon on the phone, go to <b>Follow-ups</b>, and tap <b>Turn on for this phone</b>.</p>`}
+          ${ph.problem ? `<div class="fin-alert">${esc(ph.problem)} ${ph.repairing ? "The app is installing it now; check back in a minute." : ""}</div>` : ""}
+          ${remote && checks.length ? `<details class="push-diag" ${checks.some((c) => !c.ok) && dev !== "home-screen" ? "open" : ""}><summary>Having trouble? Check this phone</summary>
+            <ul>${checks.map((c) => `<li class="${c.ok ? "ok" : "bad"}"><b>${c.ok ? "✓" : "✗"}</b> <span>${esc(c.label)}${c.ok ? "" : `<br><small>${esc(c.fix)}</small>`}</span></li>`).join("")}</ul></details>` : ""}
           ${ph.devices.length ? `<ul class="fin-list">${ph.devices.map((d) => `
             <li><div><div class="fin-li-title">${esc(d.label)}</div>
               <div class="fin-li-sub">${d.last_error ? `⚠ ${esc(d.last_error)}` : d.last_ok ? `last delivered ${esc(fmtDateTime(d.last_ok))}` : `added ${esc(fmtDateTime(d.created_at))}`}</div></div>
@@ -110,6 +113,8 @@ export async function render(view) {
     api.get("/followups"), api.get("/reminders"), api.get("/notifications"),
     api.get("/push/status").catch(() => ({ devices: [] })), deviceState().catch(() => "unsupported"),
   ]);
+  const remote = document.documentElement.classList.contains("is-remote");
+  const checks = remote ? await diagnose(ph.devices).catch(() => []) : [];
   const open = items.filter((f) => !f.done);
   const done = items.filter((f) => f.done);
 
@@ -125,7 +130,7 @@ export async function render(view) {
       </div></div>
       <button class="btn primary" id="fu-add">${icon("plus")} New follow-up</button></div>
     <p class="sub" style="margin:-8px 0 18px;color:var(--text-3)">Tip: tell the AI bar “Follow up with Sarah about the contract Friday at 10” or “Remind me every day at 7am to do my skincare”.</p>
-    ${notifyCard(notes, ph, dev)}
+    ${notifyCard(notes, ph, dev, checks)}
     <div class="shop-grid" style="margin-top:16px">
       ${column("todo", open.filter((f) => f.direction === "todo"))}
       ${column("waiting", open.filter((f) => f.direction === "waiting"))}
@@ -210,7 +215,7 @@ export async function render(view) {
     busy(e.currentTarget, "Turning on…");
     try {
       const r = await enablePush();
-      toast(r.test_sent ? "On! A test notification is on its way." : "On. (The test didn't arrive yet; try “Send a test”.)", 6000);
+      toast(r.test_sent ? "On! A test notification is on its way." : `Signed up, but the test didn't go through: ${r.test_error || "unknown reason"}`, 12000);
     } catch (err) { toast(err.message, 9000); }
     refresh();
   });

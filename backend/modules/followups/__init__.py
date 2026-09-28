@@ -5,8 +5,11 @@ from .routes import router
 
 
 def on_startup(conn):
-    from ... import notify
+    from ... import notify, push
     from . import service
+    if push.ready() and push.devices(conn):
+        # Phones are signed up but the package they need is broken: repair it quietly.
+        threading.Thread(target=push.install_missing, daemon=True).start()
     if service.get_settings(conn)["notify_enabled"] != "1":
         return
 

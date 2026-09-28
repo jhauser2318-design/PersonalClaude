@@ -1,4 +1,4 @@
-"""Home & admin: recurring upkeep (oil change, HVAC filter, gutters...) and
+"""Home maintenance (under Health): recurring upkeep (oil change, HVAC filter, gutters...) and
 important dates and documents (passport, license, car registration,
 insurance renewals, warranties). Each gets a heads-up notification.
 """
@@ -201,4 +201,4 @@ def context_line(conn) -> str:
     dates = [d for d in list_dates(conn) if d["status"] in ("expired", "soon")][:8]
     parts = [f"{i['name']} ({'due ' + i['next_due'] if i['next_due'] else 'never logged'})" for i in items]
     parts += [f"{d['name']} expires {d['date']}" for d in dates]
-    return ("HOME & ADMIN coming up: " + "; ".join(parts)) if parts else ""
+    return ("HOME MAINTENANCE coming up: " + "; ".join(parts)) if parts else ""

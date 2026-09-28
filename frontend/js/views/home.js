@@ -1,4 +1,4 @@
-// Home & admin: recurring upkeep (home, car…) and important dates/documents
+// Home maintenance (under Health): recurring upkeep (home, car…) and important dates/documents
 // (passport, license, registration, insurance, warranties).
 import { api } from "../api.js";
 import { icon } from "../icons.js";
@@ -27,8 +27,8 @@ export async function render(view, arg) {
   const o = await api.get("/home");
   view.innerHTML = `<div id="home-root">
     <div class="page-head"><div>
-      <div class="eyebrow">Home &amp; admin</div>
-      <h1>Home &amp; admin</h1>
+      <div class="eyebrow"><a href="#/area/health" class="crumb">Health</a> · home &amp; upkeep</div>
+      <h1>Home maintenance</h1>
       <div class="status-chips">
         ${o.attention ? `<span class="status-chip"><span class="dot" style="--c:var(--warning)"></span><b>${o.attention}</b> need attention</span>` : `<span class="status-chip"><span class="dot" style="--c:var(--success)"></span>all good</span>`}
         <span class="status-chip"><span class="dot" style="--c:var(--accent)"></span><b>${o.maintenance.length}</b> upkeep items</span>

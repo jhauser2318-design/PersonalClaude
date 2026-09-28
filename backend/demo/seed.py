@@ -351,7 +351,7 @@ def _seed_life(conn, today: date, rnd: random.Random, g: dict) -> None:
                        ("Comedy show at Second City", "shows"), ("Weekend in Door County", "travel")]:
         fun.add_idea(conn, title, cat)
 
-    # --- Home & admin ----------------------------------------------------------------
+    # --- Home maintenance-------------------------------------------------------------
     for name, cat, n, unit, last, notes in [
         ("Change HVAC filter", "home", 3, "months", D(-95), "16x25x1, MERV 8"),
         ("Oil change", "car", 6, "months", D(-170), "Every 5,000 miles; synthetic 0W-20"),

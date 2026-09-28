@@ -32,7 +32,9 @@ export async function render(view, areaId) {
     </div>
     ${areaId === "education" ? `<a class="card area-link" href="#/cpa" style="--area:${area.color}">${icon("book")}
       <div><b>CPA Exam Planner</b><div class="muted small">Exam dates, study hours vs plan, practice scores, credit window</div></div><span>→</span></a>` : ""}
-        ${areaId === "social" ? `<div class="area-links"><a class="card area-link" href="#/people" style="--area:${area.color}">${icon("users")}
+        ${areaId === "health" ? `<a class="card area-link" href="#/home" style="--area:${area.color}">${icon("wrench")}
+      <div><b>Home maintenance</b><div class="muted small">Upkeep that repeats (HVAC filter, oil change, dentist…) and important dates like your passport or registration</div></div><span>→</span></a>` : ""}
+    ${areaId === "social" ? `<div class="area-links"><a class="card area-link" href="#/people" style="--area:${area.color}">${icon("users")}
       <div><b>People</b><div class="muted small">Birthdays and staying in touch</div></div><span>→</span></a>
       <a class="card area-link" href="#/fun" style="--area:${area.color}">${icon("sparkle")}
       <div><b>Fun</b><div class="muted small">Things you did for fun, and ideas for next time</div></div><span>→</span></a></div>` : ""}

@@ -1,5 +1,5 @@
 """API endpoints for Workouts."""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from ...database import get_db
@@ -79,3 +79,58 @@ def delete_weight(day: str):
 def habit(body: HabitIn):
     _run(service.set_gym_habit, body.habit_id)
     return _run(service.overview)
+
+
+# ---------------------------------------------------------------------------
+# Apple Health (the iPhone sends data here; see health.py)
+# ---------------------------------------------------------------------------
+
+@router.get("/health/setup")
+async def health_setup():
+    """The address and key to put in Health Auto Export / a Shortcut."""
+    from fastapi.concurrency import run_in_threadpool
+    from ...database import demo_on
+    from ..remote import host
+    from . import health
+    if demo_on():
+        return {"demo": True}
+    with get_db(real=True) as conn:
+        key = health.get_key(conn)
+        info = health.summary(conn)
+    try:
+        ts = await run_in_threadpool(host.tailscale_status)
+    except Exception:  # noqa: BLE001 (show the setup steps anyway)
+        ts = {}
+    base = (ts or {}).get("url")
+    return {"key": key, "base": base, "url": f"{base}/api/health/import?key={key}" if base else None,
+            "last_import": info["last_import"]}
+
+
+@router.post("/health/new-key")
+def health_new_key():
+    from . import health
+    with get_db(real=True) as conn:
+        health.new_key(conn)
+    return {"ok": True}
+
+
+health_router = APIRouter(prefix="/api/health", tags=["health"])
+
+
+@health_router.post("/import")
+async def health_import(request: Request, key: str | None = None):
+    """Called by the iPhone (Health Auto Export or a Shortcut). Needs the key instead of a signed-in device."""
+    from . import health
+    auth = request.headers.get("authorization", "")
+    key = key or request.headers.get("x-api-key") or (auth[7:] if auth.lower().startswith("bearer ") else None)
+    try:
+        payload = await request.json()
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Send JSON")
+    with get_db(real=True) as conn:  # always your real data, even while demo mode is on
+        if not health.key_ok(conn, key):
+            raise HTTPException(status_code=403, detail="Wrong or missing key")
+        try:
+            return health.import_payload(conn, payload)
+        except ValidationError as e:
+            raise HTTPException(status_code=400, detail=str(e))

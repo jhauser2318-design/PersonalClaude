@@ -68,6 +68,14 @@ def get_db(real: bool = False, path=None):
         conn.close()
 
 
+_columns: list[tuple[str, str, str]] = []
+
+
+def add_column(table: str, column: str, ddl: str) -> None:
+    """A column added to an existing table in a later version (added on startup if missing)."""
+    _columns.append((table, column, ddl))
+
+
 def init_db(path=None) -> None:
     """Create any missing tables (in the real database unless `path` is given)."""
     with get_db(real=path is None, path=path) as conn:
@@ -81,6 +89,10 @@ def init_db(path=None) -> None:
         )
         for sql in _schemas:
             conn.executescript(sql)
+        for table, column, ddl in _columns:
+            have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            if have and column not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
 
 def row_to_dict(row: sqlite3.Row | None) -> dict | None:

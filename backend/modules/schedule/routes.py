@@ -48,6 +48,10 @@ class ApplyIn(BaseModel):
     date: str
 
 
+class PresetsIn(BaseModel):
+    presets: list[dict]
+
+
 class FocusIn(BaseModel):
     minutes: float
     label: str = ""
@@ -67,6 +71,7 @@ async def day(date_: str | None = None, day: str | None = None):
     d = day or date_ or date.today().isoformat()
     data = _run(service.day_plan, d)
     data["templates"] = _run(service.list_templates)
+    data["presets"] = _run(service.list_presets)
     # Important events from Google Calendar, shown next to your blocks (read-only here).
     from ..calendar import google, service as calendar
     data["events"] = []
@@ -129,6 +134,11 @@ def delete_template(template_id: int):
 @router.post("/schedule/templates/{template_id}/apply")
 def apply_template(template_id: int, body: ApplyIn):
     return _run(service.apply_template, template_id, body.date)
+
+
+@router.put("/schedule/presets")
+def save_presets(body: PresetsIn):
+    return _run(service.save_presets, body.presets)
 
 
 @router.post("/focus/finish")

@@ -119,7 +119,7 @@ def categorize(limit_batches: int = 4, everything: bool = False) -> int:
                  f"{t['account_kind']}" for i, t in enumerate(todo)]
         response = _call(client, _request(
             "categorize", "low", {"type": "json_schema", "schema": CATEGORY_SCHEMA},
-            max_tokens=16000, system=system,
+            max_tokens=16000, system=ai_models.cached(system),
             messages=[{"role": "user", "content": "\n".join(lines)}]))
         texts = [b.text for b in response.content if b.type == "text"]
         try:
@@ -366,7 +366,9 @@ def ask(question: str, history: list[dict] | None = None, report: str | None = N
     messages.append({"role": "user", "content": f"<data>\n{context}\n</data>\n\n{task}"})
 
     system = SYSTEM + ("\n\n" + REPORT_STYLE if report else "")
-    request = _request("finance", "medium", max_tokens=16000, system=system, tools=TOOLS)
+    # Cached: the instructions and tools, plus the conversation so far on each step of the tool loop.
+    request = _request("finance", "medium", max_tokens=16000, system=ai_models.cached(system), tools=TOOLS,
+                       cache_control={"type": "ephemeral"})
     state = {"changes": []}
     response = None
     for step in range(MAX_STEPS + 1):

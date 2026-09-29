@@ -129,7 +129,8 @@ def ask(question: str, history: list[dict]) -> dict:
     messages.append({"role": "user", "content": f"{intro}\n\n{question}"})
 
     # The model is chosen in Settings → AI models (see backend/ai_models.py).
-    request = dict(max_tokens=16000, system=SYSTEM, tools=TOOLS, **ai_models.request_options("email", "medium"))
+    request = dict(max_tokens=16000, system=ai_models.cached(SYSTEM), tools=TOOLS, cache_control={"type": "ephemeral"},
+                   **ai_models.request_options("email", "medium"))
 
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     state = {"seen": {}, "read": [], "draft": None}

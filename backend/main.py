@@ -14,12 +14,14 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI
+import threading
+
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 
-from . import config
+from . import backup, config
 from .areas import AREAS
 from .database import DEMO_PATH, data_version, demo_on, get_db, init_db
 from .modules import MODULES
@@ -37,11 +39,22 @@ async def lifespan(app: FastAPI):
         for module in MODULES:
             if module.on_startup:
                 module.on_startup(conn)
+    threading.Thread(target=_daily_upkeep, daemon=True).start()
     print("\n  Life Control Center is running!  Open  http://localhost:8000  in your browser.")
     if not config.api_key_configured():
         print("  (No API key found in .env yet - the command bar won't work until you add one.)")
     print("  Press Ctrl+C in this window to stop it.\n")
     yield
+
+
+def _daily_upkeep():
+    """Back up and tidy once a day while the app runs (the reminder check does it too)."""
+    while True:
+        try:
+            backup.daily()
+        except Exception:  # noqa: BLE001 (logged inside)
+            pass
+        time.sleep(3600)
 
 
 app = FastAPI(title="Life Control Center", lifespan=lifespan)
@@ -146,6 +159,42 @@ async def app_update(background: BackgroundTasks):
 
 
 # --- Demo mode (Settings → Demo mode) ---------------------------------------------
+
+# --- Backups (Settings) -------------------------------------------------------------
+
+@app.get("/api/backups")
+def backups():
+    return backup.status()
+
+
+@app.post("/api/backups")
+async def backup_now():
+    result = await run_in_threadpool(backup.backup_now)
+    return {**backup.status(), "result": result}
+
+
+@app.put("/api/backups/folder")
+def backup_folder(body: dict, request: Request):
+    if remote_auth.is_remote(request.headers):
+        raise HTTPException(status_code=403, detail="Change the backup folder on your PC.")
+    folder = str(body.get("folder") or "").strip().strip('"')
+    if folder and not Path(folder).is_dir():
+        raise HTTPException(status_code=400, detail="That folder doesn't exist on this PC. Paste the full path, e.g. C:\\Users\\Jack\\OneDrive")
+    with get_db(real=True) as conn:
+        from .database import set_setting
+        set_setting(conn, "backup_folder", folder)
+    return backup.status()
+
+
+@app.post("/api/backups/restore")
+async def backup_restore(body: dict, request: Request):
+    if remote_auth.is_remote(request.headers):
+        raise HTTPException(status_code=403, detail="Restoring a backup can only be done on your PC.")
+    try:
+        return await run_in_threadpool(backup.restore, str(body.get("name") or ""))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 @app.get("/api/demo")
 def demo_status():

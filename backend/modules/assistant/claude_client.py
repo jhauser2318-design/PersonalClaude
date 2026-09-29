@@ -285,7 +285,7 @@ def ask_claude(text: str, context: str, history: list[dict]) -> dict:
     # The model is chosen in Settings → AI models (see backend/ai_models.py).
     request = dict(
         max_tokens=8000,
-        system=SYSTEM_PROMPT,
+        system=ai_models.cached(SYSTEM_PROMPT),
         messages=messages,
         **ai_models.request_options("command", "medium", {"type": "json_schema", "schema": RESPONSE_SCHEMA}),
     )

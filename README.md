@@ -316,7 +316,8 @@ The first time you start the app, it adds one example goal per life area plus a 
 ## Your data and privacy
 
 - Everything is saved in one file on your computer: **`C:\Users\<you>\LifeControlCenter\data\life.db`** (a SQLite database).
-  **To back it up**, stop the app and copy that file somewhere safe.
+  **Backups are automatic:** once a day a copy is saved in `data\backups` (the last 14 are kept). In **Settings → Backups** you can back up right now, restore any saved copy (what's there now is saved first, so a restore can be undone), and pick an extra folder, like your OneDrive folder, so a copy survives even if the PC doesn't.
+- Old history is tidied automatically: delivered notifications and AI-bar undo history older than 90 days.
 - `data/*.db` is in `.gitignore`, so your personal data won't be uploaded to GitHub either.
 - When you use the **command bar**, the backend sends Anthropic your sentence plus a short list of your goals, tasks, routines and (if connected) calendar events for the next two weeks (titles, dates, locations), so Claude can work out what you mean. Clicking around the app doesn't send anything to Anthropic.
 - **Google Calendar**: your Google client file and access token are saved in `data\google_client.json` and `data\google_token.json` on your computer, never uploaded anywhere. Calendar changes go straight from your computer to Google.
@@ -380,6 +381,7 @@ LifeControlCenter/
 │       ├── followups/       ← follow-ups, reminders, notification history and settings
 │       ├── remote/          ← phone access: passcode sign-in, devices, background mode, Tailscale setup
 │       └── assistant/       ← command bar: Claude prompt, JSON schema, apply + undo
+├── tests/                   ← automatic checks: `python tests/run_all.py` (GitHub runs them on every change)
 └── frontend/                ← what you see in the browser (plain HTML/CSS/JS, no build step)
     ├── index.html, styles.css
     └── js/

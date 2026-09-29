@@ -36,8 +36,27 @@ function buildNav() {
   $("#check-updates").onclick = (e) => checkForUpdates(e.currentTarget);
 }
 
+// On phones: a tab bar at the bottom with the most-used pages; "More" opens the full menu.
+const TABS = [["dashboard", "home", "Home"], ["schedule", "clock", "Schedule"], ["tasks", "check", "Tasks"], ["finances", "wallet", "Money"]];
+
+function buildTabbar() {
+  if ($("#tabbar")) return;
+  const bar = document.createElement("nav");
+  bar.id = "tabbar";
+  bar.className = "tabbar";
+  bar.setAttribute("aria-label", "Main pages");
+  bar.innerHTML = TABS.map(([id, ic, label]) => `<a class="tab" href="#/${id}" data-tab="${id}">${icon(ic)}<span>${label}</span></a>`).join("")
+    + `<button class="tab" id="tab-more" type="button">${icon("menu")}<span>More</span><i class="tab-dot" id="tab-dot" hidden></i></button>`;
+  document.body.appendChild(bar);
+  bar.querySelector("#tab-more").onclick = () => openMenu(true);
+}
+
 function highlightNav() {
   const hash = location.hash || "#/dashboard";
+  const page = hash.replace(/^#\/?/, "").split("/")[0] || "dashboard";
+  document.querySelectorAll(".tabbar .tab[data-tab]").forEach((t) => t.classList.toggle("active", t.dataset.tab === page));
+  const inTabs = TABS.some(([id]) => id === page);
+  document.querySelector("#tab-more")?.classList.toggle("active", !inTabs);
   const base = hash.split("/").slice(0, hash.startsWith("#/area/") ? 3 : 2).join("/");
   document.querySelectorAll(".nav-link").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === base));
 }
@@ -91,6 +110,8 @@ async function updateBadge() {
     fu.textContent = summary.due;
     fu.hidden = summary.due === 0;
   } catch (e) { fu.hidden = true; }
+  const dot = $("#tab-dot"); // phone tab bar: something in the menu needs attention
+  if (dot) dot.hidden = fu.hidden && badge.hidden;
 }
 
 // ===========================================================================
@@ -303,6 +324,7 @@ async function start() {
     return;
   }
   buildNav();
+  buildTabbar();
   showDemoBadge();
   window.addEventListener("hashchange", route);
   route();

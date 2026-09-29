@@ -65,6 +65,12 @@ def set_model(role: str, model: str) -> None:
         set_setting(conn, f"ai_model_{role}", model)
 
 
+def cached(text: str) -> list[dict]:
+    """A system prompt marked for prompt caching: the long, unchanging instructions
+    (and any tools before them) are billed at about a tenth of the price on repeat requests."""
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
+
 def request_options(role: str, effort: str = "medium", output_format: dict | None = None) -> dict:
     """The model-specific parts of a request, so every assistant can switch models safely:
     - effort is sent to models that support it (Haiku 4.5 rejects it),

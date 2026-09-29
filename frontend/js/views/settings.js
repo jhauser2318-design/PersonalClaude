@@ -29,6 +29,7 @@ export async function render(view) {
             : `<button class="btn primary" id="demo-on">Start demo mode</button>`}
         </div>
       </section>
+      <section class="card" id="backups"><p class="muted">Loading backups…</p></section>
       <section class="card ph-card" id="phone-settings"><p class="muted">Loading phone settings…</p></section>
       <section class="card" id="ai-models">
         <h2>AI models</h2>
@@ -90,6 +91,9 @@ export async function render(view) {
   demoBtn("#demo-on", "on", "Demo mode on: showing sample data");
   demoBtn("#demo-off", "off", "Demo mode off: back to your data");
   demoBtn("#demo-reset", "reset", "Sample data reset");
+  renderBackups(view.querySelector("#backups")).catch((err) => {
+    view.querySelector("#backups").innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  });
   renderPhone(view.querySelector("#phone-settings")).catch((err) => {
     view.querySelector("#phone-settings").innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
   });
@@ -175,5 +179,54 @@ function bindUsage(box) {
   });
   box.querySelector("#credit-clear")?.addEventListener("click", async () => {
     redraw(await api.put("/command/usage/credits", { amount: null }));
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Backups
+// ---------------------------------------------------------------------------
+
+async function renderBackups(box, data) {
+  const b = data || await api.get("/backups");
+  const remote = document.documentElement.classList.contains("is-remote");
+  const when = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  const kb = (n) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+  box.innerHTML = `
+    <h2>💾 Backups</h2>
+    <p>A copy of all your data is saved automatically once a day (the last 14 are kept), in <code>${esc(b.location)}</code>.
+       ${b.last ? `Last backup: <b>${esc(when(b.last))}</b>.` : "No backup yet."}</p>
+    ${remote ? "" : `<label class="field"><span>Also copy each backup to (optional, e.g. your OneDrive folder, so it's safe even if this PC isn't)</span>
+      <div class="bk-row"><input type="text" id="bk-folder" value="${esc(b.folder)}" placeholder="${esc(b.suggested_folder || "C:\\Users\\you\\OneDrive")}">
+      <button class="btn small" id="bk-save">Save</button></div></label>
+      ${!b.folder && b.suggested_folder ? `<p class="muted small" style="margin:6px 0 0">Found <b>${esc(b.suggested_folder)}</b> on this PC. <button class="fin-link" id="bk-use">Use it</button></p>` : ""}`}
+    <div class="btn-row" style="margin-top:12px"><button class="btn" id="bk-now">Back up now</button></div>
+    ${b.backups.length ? `<details style="margin-top:12px"><summary class="muted">Saved backups (${b.backups.length})</summary>
+      <ul class="fin-list">${b.backups.map((x) => `<li><div><div class="fin-li-title">${esc(when(x.saved_at))}${x.before_restore ? ` <span class="pill">before a restore</span>` : ""}</div>
+        <div class="fin-li-sub">${esc(kb(x.size))}</div></div>
+        ${remote ? "" : `<button class="btn small" data-restore="${esc(x.name)}">Restore</button>`}</li>`).join("")}</ul></details>` : ""}`;
+  const redo = (d) => renderBackups(box, d);
+  box.querySelector("#bk-now").onclick = async (e) => {
+    e.currentTarget.disabled = true; e.currentTarget.textContent = "Backing up…";
+    try {
+      const r = await api.post("/backups");
+      toast(r.result.extra_error || `Backed up${r.result.extra ? ` (also copied to ${r.result.extra})` : ""}`, 5000);
+      redo(r);
+    } catch (err) { toast(err.message, 7000); redo(); }
+  };
+  const saveFolder = async (folder) => {
+    try { redo(await api.put("/backups/folder", { folder })); toast(folder ? "Backups will also be copied there" : "Extra copy turned off"); }
+    catch (err) { toast(err.message, 7000); }
+  };
+  box.querySelector("#bk-save")?.addEventListener("click", () => saveFolder(box.querySelector("#bk-folder").value));
+  box.querySelector("#bk-use")?.addEventListener("click", () => saveFolder(b.suggested_folder));
+  box.querySelectorAll("[data-restore]").forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm("Replace your current data with this backup? What's there now is saved as a backup first, so you can undo this.")) return;
+      try {
+        await api.post("/backups/restore", { name: btn.dataset.restore });
+        toast("Restored. Reloading…", 3000);
+        setTimeout(() => location.reload(), 800);
+      } catch (err) { toast(err.message, 7000); }
+    };
   });
 }

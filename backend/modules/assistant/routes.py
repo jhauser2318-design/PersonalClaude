@@ -56,6 +56,21 @@ def set_model(body: ModelIn):
     return ai_models.choices()
 
 
+RECENT_DAYS = 14  # finished items stay visible to the AI bar this long (for "undo that" / "reopen it")
+
+
+def relevant(goals: list[dict], tasks: list[dict], items: list[dict], fups: list[dict]):
+    """Only what the AI bar needs: everything open, plus things finished recently.
+    Without this the request grows with every task you ever complete."""
+    cutoff = (date.today() - timedelta(days=RECENT_DAYS)).isoformat()
+    recent = lambda ts: (ts or "") >= cutoff  # noqa: E731
+    goals = [g for g in goals if g["status"] != "done" or recent(g.get("updated_at"))]
+    tasks = [t for t in tasks if not t["done"] or recent(t.get("done_at") or t.get("updated_at"))]
+    items = [i for i in items if not i["bought"] or recent(i.get("bought_at"))]
+    fups = [f for f in fups if not f["done"] or recent(f.get("done_at") or f.get("updated_at"))]
+    return goals, tasks, items, fups
+
+
 def extra_context(conn) -> dict:
     """Schedule, people, CPA, fun and home for the AI bar (each skipped if it fails)."""
     from ..cpa import service as cpa
@@ -96,9 +111,9 @@ async def run_command(body: CommandIn):
             cal["error"] = str(e)
 
     with get_db() as conn:
-        context = build_context(service.list_goals(conn), service.list_tasks(conn),
-                                habits.list_habits(conn), cal, shopping.list_items(conn),
-                                followups.list_followups(conn), extra_context(conn))
+        goals_, tasks_, items_, fups_ = relevant(service.list_goals(conn), service.list_tasks(conn),
+                                                 shopping.list_items(conn), followups.list_followups(conn))
+        context = build_context(goals_, tasks_, habits.list_habits(conn), cal, items_, fups_, extra_context(conn))
 
     try:
         # Calling Claude takes a few seconds; run it off the main thread so the

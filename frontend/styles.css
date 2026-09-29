@@ -1233,3 +1233,7 @@ input[type=range] { width: 100%; accent-color: var(--area, var(--accent)); }
 .push-diag li.ok b { color: var(--success); }
 .push-diag li.bad b { color: var(--danger); }
 .push-diag small { color: var(--text-3); }
+
+/* Settings: backups */
+.bk-row { display: flex; gap: 8px; align-items: center; }
+.bk-row input { flex: 1; min-width: 0; }

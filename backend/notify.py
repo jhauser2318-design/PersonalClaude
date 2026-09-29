@@ -377,6 +377,11 @@ def run_once(now: datetime | None = None, sender=None) -> dict:
     finally:
         conn.close()
     synced = morning_finance_sync(now)
+    try:
+        from . import backup  # once a day: a copy of your data, and old history tidied
+        backup.daily()
+    except Exception as e:  # noqa: BLE001
+        log.warning("Daily backup failed: %s", e)
     return {"created": created, "shown": shown, "synced": synced}
 
 

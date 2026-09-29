@@ -17,7 +17,9 @@ from ..habits import service as habits
 from ..shopping import links as shopping_links
 from ..shopping import service as shopping
 from ..cpa import service as cpa
+from ..finances import planning
 from ..fun import service as fun
+from ..home import service as home
 from ..people import service as people
 from ..schedule import service as schedule
 
@@ -346,10 +348,13 @@ def _apply(conn, actions: list[dict], undo: list[dict]) -> tuple[list[dict], lis
             if not end:
                 h, m = map(int, start.split(":"))
                 end = f"{min(h + 1, 24):02d}:{m:02d}"
+            remind = action.get("remind_at")
             block = schedule.create_block(conn, {"date": day, "start": start, "end": end, "title": action.get("title"),
-                                                 "area": action.get("area"), "notes": action.get("note") or ""})
+                                                 "area": action.get("area"), "notes": action.get("note") or "",
+                                                 "remind": int(remind) if str(remind or "").strip().isdigit() else None})
             undo.append({"kind": "block", "id": block["id"], "before": None})
-            summary.append(f"🗓 {_day_label(block['date'])} {block['start']}–{block['end']}: {block['title']} (your schedule)")
+            bell = "" if block["remind"] is None else (" 🔔 at the start" if block["remind"] == 0 else f" 🔔 {block['remind']} min before")
+            summary.append(f"🗓 {_day_label(block['date'])} {block['start']}–{block['end']}: {block['title']} (your schedule){bell}")
 
         elif kind == "update_schedule_block":
             block_id = _require(action, "block_id", "schedule block")
@@ -419,6 +424,48 @@ def _apply(conn, actions: list[dict], undo: list[dict]) -> tuple[list[dict], lis
             undo.append({"kind": "fun_idea", "id": idea["id"], "before": None})
             summary.append(f"💡 Added to your fun ideas: {idea['title']}")
 
+        elif kind == "add_home_job":
+            cat = (action.get("description") or "home").lower()
+            job = home.save_item(conn, {"name": action.get("title"), "one_time": True, "due_date": action.get("due_date"),
+                                        "category": cat if cat in home.CATEGORIES else "home",
+                                        "notes": action.get("note") or ""})
+            undo.append({"kind": "home_item", "id": job["id"], "before": None})
+            summary.append(f"🔧 Job added: {job['name']}" + (f" (by {_day_label(job['due_date'])})" if job["due_date"] else ""))
+
+        elif kind == "complete_home_item":
+            item_id = _require(action, "item_id", "home maintenance item")
+            before = row_to_dict(conn.execute("SELECT * FROM maintenance WHERE id = ?", (item_id,)).fetchone())
+            if before is None:
+                raise ValidationError(f"Home maintenance item #{item_id} doesn't exist")
+            after = home.mark_done(conn, item_id, action.get("date"), action.get("price"), action.get("note") or "")
+            log_id = conn.execute("SELECT MAX(id) FROM maintenance_log WHERE item_id = ?", (item_id,)).fetchone()[0]
+            undo.append({"kind": "home_done", "id": item_id, "log_id": log_id, "before": before})
+            nxt = "" if after["one_time"] else f" · next due {_day_label(after['next_due'])}"
+            summary.append(f"🔧 Done: {after['name']}{nxt}")
+
+        elif kind == "add_bill":
+            day = action.get("date") or ""
+            freq = (action.get("unit") or "monthly").lower()
+            bill = planning.save_bill(conn, {"name": action.get("title"), "amount": action.get("price") or 0,
+                                             "due_day": int(day[8:10]) if len(day) >= 10 else 1,
+                                             "frequency": freq if freq in planning.FREQUENCIES else "monthly",
+                                             "start_month": int(day[5:7]) if len(day) >= 7 else None,
+                                             "notes": action.get("note") or ""})
+            undo.append({"kind": "bill", "id": bill["id"], "before": None})
+            summary.append(f"💳 Bill added: {bill['name']} ${bill['amount']:,.2f} on day {bill['due_day']} ({bill['frequency']})")
+
+        elif kind == "add_to_savings":
+            name = (action.get("title") or "").strip().lower()
+            goals_ = planning.list_savings(conn)
+            match = next((g for g in goals_ if g["name"].lower() == name), None) or \
+                next((g for g in goals_ if name and name in g["name"].lower()), None)
+            if match is None:
+                raise ValidationError(f"There's no savings goal called “{action.get('title')}”")
+            before = row_to_dict(conn.execute("SELECT * FROM fin_savings_goals WHERE id = ?", (match["id"],)).fetchone())
+            g = planning.add_to_savings(conn, match["id"], action.get("price") or 0)
+            undo.append({"kind": "savings", "id": g["id"], "before": before})
+            summary.append(f"💰 {g['name']}: ${g['saved']:,.0f} of ${g['target']:,.0f} ({g['pct']}%)")
+
         else:
             raise ValidationError(f"Unknown action '{kind}'")
 
@@ -448,7 +495,8 @@ def undo_command(conn, log_id: int) -> str:
     tables = {"goal": "goals", "task": "tasks", "note": "goal_notes",
               "habit": "habits", "habit_log": "habit_logs", "shopping": "shopping_items",
               "followup": "followups", "block": "schedule_blocks", "cpa_score": "cpa_scores",
-              "person": "people", "interaction": "interactions", "fun": "fun_log", "fun_idea": "fun_ideas"}
+              "person": "people", "interaction": "interactions", "fun": "fun_log", "fun_idea": "fun_ideas",
+              "home_item": "maintenance", "bill": "fin_bills", "savings": "fin_savings_goals"}
     # Undo in reverse order: the last change is reverted first.
     for change in reversed(json.loads(row["changes"])):
         if change["kind"] == "event":
@@ -462,6 +510,10 @@ def undo_command(conn, log_id: int) -> str:
             continue
         if change["kind"] == "reminder":
             followups.restore_reminder(conn, change["rkind"], change["ref_id"], change["before"])
+            continue
+        if change["kind"] == "home_done":
+            conn.execute("DELETE FROM maintenance_log WHERE id = ?", (change["log_id"],))
+            conn.execute("UPDATE maintenance SET last_done = ? WHERE id = ?", (change["before"]["last_done"], change["id"]))
             continue
         if change["kind"] == "deleted":
             cols = list(change["before"])

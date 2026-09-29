@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 
-from . import backup, config
+from . import backup, config, search as search_
 from .areas import AREAS
 from .database import DEMO_PATH, data_version, demo_on, get_db, init_db
 from .modules import MODULES
@@ -159,6 +159,12 @@ async def app_update(background: BackgroundTasks):
 
 
 # --- Demo mode (Settings → Demo mode) ---------------------------------------------
+
+@app.get("/api/search")
+def search(q: str = ""):
+    with get_db() as conn:
+        return search_.search(conn, q)
+
 
 # --- Backups (Settings) -------------------------------------------------------------
 

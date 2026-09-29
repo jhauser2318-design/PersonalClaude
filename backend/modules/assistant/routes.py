@@ -74,6 +74,7 @@ def relevant(goals: list[dict], tasks: list[dict], items: list[dict], fups: list
 def extra_context(conn) -> dict:
     """Schedule, people, CPA, fun and home for the AI bar (each skipped if it fails)."""
     from ..cpa import service as cpa
+    from ..finances import planning
     from ..fun import service as fun
     from ..home import service as home
     from ..people import service as people
@@ -86,6 +87,7 @@ def extra_context(conn) -> dict:
         "cpa": lambda: cpa.context_line(conn),
         "fun": lambda: fun.context_line(conn),
         "home": lambda: home.context_line(conn),
+        "money": lambda: planning.context_line(conn),
     }
     for key, fn in parts.items():
         try:

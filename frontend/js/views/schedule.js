@@ -10,6 +10,8 @@ import { areaOptions, esc, openDialog, showError, toast, todayISO } from "../ui.
 const HOUR_PX = 56;
 const SNAP = 15; // minutes: blocks snap to quarter hours while dragging
 const LAST_MIN = 23 * 60 + 59;
+const REMIND = [["", "No reminder"], ["0", "At the start"], ["5", "5 min before"], ["10", "10 min before"], ["15", "15 min before"], ["30", "30 min before"], ["60", "1 hour before"]];
+const remindOptions = (v) => REMIND.map(([k, t]) => `<option value="${k}" ${String(v ?? "") === k ? "selected" : ""}>${t}</option>`).join("");
 let suppressClick = false; // a drag just ended: don't also treat it as a click
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 let current = null; // the day being shown (YYYY-MM-DD)
@@ -89,7 +91,7 @@ function timeline(plan, day) {
             <span class="si-grip" data-grip title="Drag to move" aria-hidden="true">⋮⋮</span>
             <input type="checkbox" class="check" ${it.done ? "checked" : ""} aria-label="Mark “${esc(it.title)}” as done">
             <div class="si-main">
-              <div class="si-title">${esc(it.title)}</div>
+              <div class="si-title">${esc(it.title)}${it.remind != null ? ` <span class="si-bell" title="Reminder on">🔔</span>` : ""}</div>
               ${short ? `<div class="si-time" hidden></div>` : `<div class="si-time">${esc(fmtTime(it.start))}–${esc(fmtTime(it.end))}${it.notes ? ` · ${esc(it.notes)}` : ""}</div>`}
             </div>
             ${isToday && !it.done ? `<button class="icon-btn si-focus" data-focus="${it.id}" title="Start a focus timer for this block" aria-label="Focus">${icon("timer")}</button>` : ""}
@@ -248,8 +250,11 @@ export function openBlockEditor(b = {}, onChange = () => state.refresh()) {
           <label class="field"><span>Life area (optional)</span>
             <select name="area"><option value="">None</option>${areaOptions(b.area)}</select></label>
         </div>
-        <label class="field"><span>Notes (optional)</span>
-          <input type="text" name="notes" value="${esc(b.notes || "")}" placeholder="e.g. FAR chapter 6, library"></label>
+        <div class="row">
+          <label class="field"><span>Notes (optional)</span>
+            <input type="text" name="notes" value="${esc(b.notes || "")}" placeholder="e.g. FAR chapter 6, library"></label>
+          <label class="field"><span>Notify me</span><select name="remind">${remindOptions(b.remind)}</select></label>
+        </div>
         ${isNew ? "" : `<label class="field" style="flex-direction:row;align-items:center;gap:8px">
           <input type="checkbox" name="done" ${b.done ? "checked" : ""}> <span>Done</span></label>`}
         <p class="muted small" style="margin:0">Time blocks stay in this app. Nothing here goes to Google Calendar. To put something on it, use the Calendar page or say “…on my calendar” in the AI bar.</p>
@@ -275,7 +280,7 @@ export function openBlockEditor(b = {}, onChange = () => state.refresh()) {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const body = { title: form.title.value.trim(), start: form.start.value, end: form.end.value, date: form.date.value,
-      area: form.area.value || null, notes: form.notes.value.trim() };
+      area: form.area.value || null, notes: form.notes.value.trim(), remind: form.remind.value === "" ? null : Number(form.remind.value) };
     if (!isNew) body.done = form.done.checked;
     try {
       if (isNew) await api.post("/schedule/blocks", body);
@@ -448,12 +453,13 @@ function bindDrag(root, day, presets, refresh) {
       if (!ghost) { // a click: open it pre-filled at the next free-ish time
         const now = new Date();
         const at = day === todayISO() ? Math.min(LAST_MIN - p.minutes, snap(now.getHours() * 60 + now.getMinutes() + 7)) : 9 * 60;
-        return openBlockEditor({ date: day, title: p.title, area: p.area, start: fromMin(at), end: fromMin(Math.min(LAST_MIN, at + p.minutes)) }, refresh);
+        return openBlockEditor({ date: day, title: p.title, area: p.area, remind: p.remind ?? null, start: fromMin(at),
+          end: fromMin(Math.min(LAST_MIN, at + p.minutes)) }, refresh);
       }
       if (start == null) return;
       try {
         await api.post("/schedule/blocks", { date: day, title: p.title, area: p.area, start: fromMin(start),
-          end: fromMin(Math.min(LAST_MIN, start + p.minutes)) });
+          end: fromMin(Math.min(LAST_MIN, start + p.minutes)), remind: p.remind ?? null });
         toast(`${p.title} added at ${fmtTime(fromMin(start))}`);
       } catch (err) { toast(err.message, 5000); }
       refresh();
@@ -465,15 +471,16 @@ function bindDrag(root, day, presets, refresh) {
 }
 
 function openPresetEditor(presets, onChange) {
-  const row = (p = { title: "", minutes: 60, area: null }) => `<div class="preset-row">
+  const row = (p = { title: "", minutes: 60, area: null, remind: null }) => `<div class="preset-row">
     <input type="text" data-k="title" value="${esc(p.title)}" placeholder="Name" aria-label="Name">
     <input type="number" data-k="minutes" min="5" step="5" value="${p.minutes}" aria-label="Minutes">
     <select data-k="area" aria-label="Life area"><option value="">No area</option>${areaOptions(p.area)}</select>
+    <select data-k="remind" aria-label="Notify me">${remindOptions(p.remind)}</select>
     <button type="button" class="icon-btn danger" data-rm aria-label="Remove">${icon("x")}</button></div>`;
   const dlg = openDialog({
     title: "Common blocks", style: "--area:var(--accent)",
     body: `<form id="pre-form" class="dlg-body" style="padding:0">
-      <p class="muted small" style="margin:0">The blocks you drag onto your day. Name · length in minutes · life area.</p>
+      <p class="muted small" style="margin:0">The blocks you drag onto your day. Name · length in minutes · life area · reminder.</p>
       <div id="pre-rows">${presets.map(row).join("")}</div>
       <button type="button" class="btn small" id="pre-add" style="align-self:flex-start">${icon("plus")} Add one</button>
     </form>`,
@@ -486,7 +493,8 @@ function openPresetEditor(presets, onChange) {
     e.preventDefault();
     const list = [...rows.querySelectorAll(".preset-row")].map((r) => ({
       title: r.querySelector('[data-k="title"]').value.trim(), minutes: Number(r.querySelector('[data-k="minutes"]').value || 60),
-      area: r.querySelector('[data-k="area"]').value || null })).filter((p) => p.title);
+      area: r.querySelector('[data-k="area"]').value || null,
+      remind: r.querySelector('[data-k="remind"]').value === "" ? null : Number(r.querySelector('[data-k="remind"]').value) })).filter((p) => p.title);
     try {
       await api.put("/schedule/presets", { presets: list });
       dlg.close();

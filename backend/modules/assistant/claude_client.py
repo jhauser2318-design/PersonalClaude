@@ -22,7 +22,8 @@ ACTION_TYPES = ["create_goal", "update_goal", "add_note", "create_task", "update
                 "add_shopping_item", "update_shopping_item", "remove_shopping_item",
                 "create_followup", "update_followup", "set_reminder",
                 "add_schedule_block", "update_schedule_block", "remove_schedule_block",
-                "log_cpa_score", "add_person", "log_contact", "log_fun", "add_fun_idea"]
+                "log_cpa_score", "add_person", "log_contact", "log_fun", "add_fun_idea",
+                "add_home_job", "complete_home_item", "add_bill", "add_to_savings"]
 
 
 # Every action field is always present, with a "blank" value when it doesn't
@@ -135,7 +136,7 @@ Actions. Every field must be present in every action. For fields that don't appl
 - delete_event: event_id (required). Only when the user clearly asks to cancel or remove that specific event.
 
 Daily schedule (the user's own time blocks for their day; it NEVER goes to Google Calendar):
-- add_schedule_block: a personal time block ("gym 6-7am tomorrow", "block 7-9pm for CPA study", "deep work 9 to 11", "plan my morning: ..."). date (YYYY-MM-DD, "" = today), start and end as "HH:MM" (24-hour), title, area (optional), note (optional). If no end is given, make it 1 hour. Several blocks = several actions.
+- add_schedule_block: a personal time block ("gym 6-7am tomorrow", "block 7-9pm for CPA study", "deep work 9 to 11", "plan my morning: ..."). date (YYYY-MM-DD, "" = today), start and end as "HH:MM" (24-hour), title, area (optional), note (optional). If no end is given, make it 1 hour. Several blocks = several actions. If they want a heads-up ("remind me", "ping me 10 min before"), set remind_at to the minutes before the start as a number in a string ("0" = at the start, "10"); otherwise "".
 - update_schedule_block: block_id (required, from SCHEDULE) plus only what changes: date, start, end, title, area, note, or done "yes"/"no" ("finished my study block").
 - remove_schedule_block: block_id (required), when the user asks to remove/clear a block.
 
@@ -149,6 +150,15 @@ People:
 Fun & leisure (a log of fun things the user did, and ideas for later):
 - log_fun: something fun the user did ("went bowling with Sam last night, so fun", "concert at the Riviera Saturday, 5/5"). title = short name of the activity ("Bowling with Sam"); description = category, one of outdoors, friends, food, travel, games, shows, sports, creative, relax, other; date ("" = today); amount = how fun 1-5 if they say or it's clear ("amazing" = 5, "fine" = 3), else 0; person = who they were with, or ""; location = where, or ""; price = what it cost if said, else -1; note = extra detail (optional). If an idea in FUN ideas matches, still use log_fun (the app keeps both).
 - add_fun_idea: something fun they want to do some day ("I want to try axe throwing", "add a Chicago food tour to my fun ideas"). title, description = category, note (optional).
+
+Home maintenance (see HOME MAINTENANCE):
+- add_home_job: a one-time job around the house, car or health ("fix the leaky faucet by Friday", "get winter tires put on"). title; due_date (optional); description = category: home, car, health or other; note (optional).
+- complete_home_item: the user did a job or a repeating upkeep item ("changed the HVAC filter", "fixed the faucet, cost $12"). item_id (from HOME MAINTENANCE, required); date ("" = today); price = what it cost, else -1; note (optional). For a repeating item this moves its next due date forward.
+
+Bills and savings (see BILLS and SAVINGS GOALS):
+- add_bill: a bill that doesn't show up in the bank transactions ("rent is $1,450 on the 1st", "car insurance $600 every year in March"). title; price = amount; date = any date in a month it's due (the day of month is used; "" = the 1st); unit = "monthly", "quarterly" or "yearly" ("" = monthly); note (optional).
+- add_to_savings: money put toward a savings goal tracked by hand ("put $200 toward the Lisbon trip"). title = the goal's name as in SAVINGS GOALS; price = amount (negative to take money out). Goals linked to a bank account update by themselves: say so instead.
+- Other money questions (spending, budgets, balances) are intent "finance".
 
 4. intent "email": the request needs the user's email (Gmail): questions about emails ("what did Sarah say about the budget?", "any bills due?", "summarize my unread emails") or writing/replying/sending an email ("reply to Sarah that Thursday works", "email Alex about dinner"). Leave "actions" empty and put a very short note in "reply" ("Checking your email…"); a separate email assistant with Gmail access takes it from there.
 5. intent "finance": the request is about the user's money: bank/credit card balances, transactions, spending, income, cash flow, budgets, subscriptions, or a financial report ("how much did I spend on food last month?", "am I on budget?", "what are my subscriptions?", "set my dining budget to $300", "give me a spending report", "how did yesterday go money-wise?"), or a standing money rule ("always put Venmo to Mike in Housing", "remember that transfers to savings aren't spending"). Leave "actions" empty and put a very short note in "reply" ("Checking your finances…"); a separate finance assistant with access to the user's synced accounts takes it from there. Shopping-list questions are NOT finance: answer those from SHOPPING.
@@ -257,7 +267,7 @@ def build_context(goals: list[dict], tasks: list[dict], habits: list[dict] | Non
                      f"{'done' if b['done'] else 'open'}")
     lines += ["", "PEOPLE (id | name | relation | birthday MM-DD | last contact | reach out):"]
     lines += extra.get("people") or ["(none)"]
-    for key in ("cpa", "fun", "home"):
+    for key in ("cpa", "fun", "home", "money"):
         if extra.get(key):
             lines += ["", extra[key]]
     return "\n".join(lines)

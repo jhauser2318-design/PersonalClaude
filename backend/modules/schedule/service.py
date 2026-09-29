@@ -11,7 +11,7 @@ import re
 from datetime import date, datetime, timedelta
 
 from ...areas import AREA_IDS
-from ...database import get_setting, register_schema, row_to_dict, set_setting
+from ...database import add_column, get_setting, register_schema, row_to_dict, set_setting
 from ..goals.service import ValidationError, now_iso
 
 register_schema(
@@ -49,6 +49,10 @@ register_schema(
     """
 )
 
+# Notify me before a block starts: minutes before (0 = at the start), NULL = no reminder.
+add_column("schedule_blocks", "remind", "INTEGER")
+REMIND_CHOICES = [0, 5, 10, 15, 30, 60]
+
 TIME_RE = re.compile(r"^(\d{1,2}):(\d{2})$")
 
 
@@ -83,6 +87,8 @@ def _clean(fields: dict) -> dict:
             value = (value or "").strip()
         elif key == "done":
             value = 1 if value else 0
+        elif key == "remind":
+            value = None if value in (None, "", False) else (0 if value is True else max(0, min(120, int(value))))
         else:
             continue
         out[key] = value
@@ -108,7 +114,7 @@ def list_blocks(conn, day: str) -> list[dict]:
 
 
 def create_block(conn, fields: dict) -> dict:
-    data = {"area": None, "notes": "", "done": 0}
+    data = {"area": None, "notes": "", "done": 0, "remind": None}
     data.update(_clean(fields))
     for k in ("date", "start", "end", "title"):
         if k not in data:
@@ -116,8 +122,10 @@ def create_block(conn, fields: dict) -> dict:
     _check(data)
     conn.execute("INSERT OR IGNORE INTO schedule_days (date, filled) VALUES (?, 1)", (data["date"],))
     cur = conn.execute(
-        "INSERT INTO schedule_blocks (date, start, end, title, area, notes, done, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (data["date"], data["start"], data["end"], data["title"], data["area"], data["notes"], data["done"], now_iso()))
+        "INSERT INTO schedule_blocks (date, start, end, title, area, notes, done, remind, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (data["date"], data["start"], data["end"], data["title"], data["area"], data["notes"], data["done"],
+         data["remind"], now_iso()))
     return get_block(conn, cur.lastrowid)
 
 
@@ -149,7 +157,7 @@ def copy_day(conn, from_day: str, to_day: str, replace: bool = False) -> list[di
         conn.execute("DELETE FROM schedule_blocks WHERE date = ?", (to_day,))
     for b in list_blocks(conn, from_day):
         create_block(conn, {"date": to_day, "start": b["start"], "end": b["end"], "title": b["title"],
-                            "area": b["area"], "notes": b["notes"]})
+                            "area": b["area"], "notes": b["notes"], "remind": b.get("remind")})
     return list_blocks(conn, to_day)
 
 
@@ -173,9 +181,9 @@ def save_template(conn, name: str, weekdays: list[int], blocks: list[dict], temp
     days = ",".join(str(d) for d in sorted({int(d) for d in weekdays if 0 <= int(d) <= 6}))
     clean_blocks = []
     for b in blocks:
-        cb = _clean({k: b.get(k) for k in ("start", "end", "title", "area", "notes") if k in b})
+        cb = _clean({k: b.get(k) for k in ("start", "end", "title", "area", "notes", "remind") if k in b})
         _check(cb)
-        clean_blocks.append({k: cb.get(k) for k in ("start", "end", "title", "area", "notes")})
+        clean_blocks.append({k: cb.get(k) for k in ("start", "end", "title", "area", "notes", "remind")})
     clean_blocks.sort(key=lambda b: b["start"])
     # A weekday belongs to one template only.
     for t in list_templates(conn):
@@ -263,7 +271,9 @@ def save_presets(conn, presets: list[dict]) -> list[dict]:
         if not title:
             continue
         minutes = max(5, min(12 * 60, int(p.get("minutes") or 60)))
-        clean.append({"title": title[:40], "minutes": minutes, "area": p.get("area") if p.get("area") in AREA_IDS else None})
+        remind = p.get("remind")
+        clean.append({"title": title[:40], "minutes": minutes, "area": p.get("area") if p.get("area") in AREA_IDS else None,
+                      "remind": None if remind in (None, "", False) else int(remind)})
     set_setting(conn, "schedule_presets", json.dumps(clean))
     return clean
 

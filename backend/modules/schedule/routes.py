@@ -19,6 +19,7 @@ class BlockIn(BaseModel):
     title: str
     area: str | None = None
     notes: str = ""
+    remind: int | None = None
 
 
 class BlockPatch(BaseModel):
@@ -29,6 +30,7 @@ class BlockPatch(BaseModel):
     area: str | None = None
     notes: str | None = None
     done: bool | None = None
+    remind: int | None = -1  # -1 = not sent (leave as is); None = turn the reminder off
 
 
 class CopyIn(BaseModel):
@@ -90,7 +92,10 @@ def create(body: BlockIn):
 
 @router.patch("/schedule/blocks/{block_id}")
 def update(block_id: int, body: BlockPatch):
-    return _run(service.update_block, block_id, body.model_dump(exclude_unset=True))
+    fields = body.model_dump(exclude_unset=True)
+    if fields.get("remind") == -1:
+        fields.pop("remind")
+    return _run(service.update_block, block_id, fields)
 
 
 @router.delete("/schedule/blocks/{block_id}")

@@ -221,9 +221,15 @@ def overview(conn) -> dict:
 
 
 def context_line(conn) -> str:
-    items = [i for i in list_maintenance(conn) if i["status"] in ("overdue", "soon", "never", "todo")][:10]
+    """For the AI bar: every open one-time job and repeating item (with ids), and dates coming up."""
+    lines = ["HOME MAINTENANCE (id | kind | name | due / status):"]
+    for i in list_maintenance(conn):
+        if i["one_time"] and i["status"] == "done":
+            continue
+        kind = "one-time job" if i["one_time"] else i["every_text"]
+        due = f"due {i['next_due']}" if i["next_due"] else ("no date" if i["one_time"] else "never logged")
+        lines.append(f"#{i['id']} | {kind} | {i['name']} | {due} ({i['status']})")
     dates = [d for d in list_dates(conn) if d["status"] in ("expired", "soon")][:8]
-    parts = [f"{i['name']} ({'one-time job, ' if i['one_time'] else ''}"
-             f"{'due ' + i['next_due'] if i['next_due'] else 'no date' if i['one_time'] else 'never logged'})" for i in items]
-    parts += [f"{d['name']} expires {d['date']}" for d in dates]
-    return ("HOME MAINTENANCE coming up: " + "; ".join(parts)) if parts else ""
+    if dates:
+        lines.append("Important dates coming up: " + "; ".join(f"{d['name']} expires {d['date']}" for d in dates))
+    return "\n".join(lines) if len(lines) > 1 or dates else ""

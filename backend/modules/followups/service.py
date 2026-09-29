@@ -58,7 +58,8 @@ KINDS = {"task": "once", "followup": "once", "routine": "daily"}
 LINKS = {"task": "tasks", "followup": "followups", "routine": "routines"}
 
 # Settings (in app_settings) and their defaults.
-SETTINGS = {"notify_enabled": "0", "notify_briefing": "", "notify_budget": "1", "notify_desktop": "1"}
+SETTINGS = {"notify_enabled": "0", "notify_briefing": "", "notify_budget": "1", "notify_desktop": "1",
+            "notify_calendar": "0"}  # minutes before Google Calendar events (0 = off)
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +77,8 @@ def save_settings(conn, fields: dict) -> dict:
         value = str(value)
         if key == "notify_briefing" and value and not re.fullmatch(r"\d{2}:\d{2}", value):
             raise ValidationError("Morning briefing time must look like 08:00")
+        if key == "notify_calendar":
+            value = str(value) if str(value) in ("0", "5", "10", "15", "30", "60") else "0"
         if key in ("notify_enabled", "notify_budget", "notify_desktop"):
             value = "1" if value in ("1", "True", "true") else "0"
         set_setting(conn, key, value)

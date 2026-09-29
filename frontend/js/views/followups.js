@@ -49,7 +49,7 @@ function column(kind, items) {
     </section>`;
 }
 
-function notifyCard(n, ph, dev, checks = []) {
+function notifyCard(n, ph, dev, checks = [], sleep = {}) {
   const bg = n.background;
   const on = n.settings.notify_enabled === "1";
   const desktop = n.settings.notify_desktop !== "0";
@@ -76,6 +76,9 @@ function notifyCard(n, ph, dev, checks = []) {
             : `<button class="btn primary" id="n-on" ${bg.supported ? "" : "disabled"}>${icon("bell")} Turn on notifications</button>`}
         </div>`}
       </div>
+      ${sleep.supported && sleep.ac > 0 && on ? `<div class="fin-alert"><span>😴 This PC goes to sleep after <b>${sleep.ac} min</b> when plugged in.
+          Reminders can't be sent while it sleeps (they arrive when it wakes).${sleep.dc > 0 ? " On battery it will still sleep, which saves your battery." : ""}</span>
+        ${remote ? "" : `<button class="btn small" id="n-awake">Keep awake when plugged in</button>`}</div>` : ""}
       <div class="fu-channels">
         <div class="fu-channel">
           <div class="eyebrow">📱 Phones</div>
@@ -102,6 +105,9 @@ function notifyCard(n, ph, dev, checks = []) {
       <div class="fu-settings">
         <label class="field"><span>Morning briefing</span>
           <select id="n-brief">${times.map((t) => `<option value="${t}" ${t === n.settings.notify_briefing ? "selected" : ""}>${t ? `at ${t}` : "Off"}</option>`).join("")}</select></label>
+        <label class="field"><span>Google Calendar events</span>
+          <select id="n-cal">${[["0", "No alert"], ["5", "5 min before"], ["10", "10 min before"], ["15", "15 min before"], ["30", "30 min before"], ["60", "1 hour before"]]
+            .map(([v, t]) => `<option value="${v}" ${v === (n.settings.notify_calendar || "0") ? "selected" : ""}>${t}</option>`).join("")}</select></label>
         <label class="fin-check"><input type="checkbox" id="n-budget" ${n.settings.notify_budget === "1" ? "checked" : ""}>
           <span>Budget alerts: tell me when a category goes over its monthly budget (checked after each morning bank sync)</span></label>
       </div>
@@ -113,6 +119,7 @@ export async function render(view) {
     api.get("/followups"), api.get("/reminders"), api.get("/notifications"),
     api.get("/push/status").catch(() => ({ devices: [] })), deviceState().catch(() => "unsupported"),
   ]);
+  const sleep = await api.get("/notifications/sleep").catch(() => ({ supported: false }));
   const remote = document.documentElement.classList.contains("is-remote");
   const checks = remote ? await diagnose(ph.devices).catch(() => []) : [];
   const open = items.filter((f) => !f.done);
@@ -130,7 +137,7 @@ export async function render(view) {
       </div></div>
       <button class="btn primary" id="fu-add">${icon("plus")} New follow-up</button></div>
     <p class="sub" style="margin:-8px 0 18px;color:var(--text-3)">Tip: tell the AI bar “Follow up with Sarah about the contract Friday at 10” or “Remind me every day at 7am to do my skincare”.</p>
-    ${notifyCard(notes, ph, dev, checks)}
+    ${notifyCard(notes, ph, dev, checks, sleep)}
     <div class="shop-grid" style="margin-top:16px">
       ${column("todo", open.filter((f) => f.direction === "todo"))}
       ${column("waiting", open.filter((f) => f.direction === "waiting"))}
@@ -206,6 +213,16 @@ export async function render(view) {
     await api.post("/notifications/disable");
     toast("Notifications turned off");
     refresh();
+  });
+  root.querySelector("#n-awake")?.addEventListener("click", async (e) => {
+    busy(e.currentTarget, "Changing…");
+    try { await api.post("/notifications/sleep/keep-awake"); toast("Done: this PC stays awake while plugged in (the screen still turns off)", 6000); }
+    catch (err) { toast(err.message, 10000); }
+    refresh();
+  });
+  root.querySelector("#n-cal").addEventListener("change", async (e) => {
+    await api.patch("/notifications/settings", { notify_calendar: Number(e.target.value) });
+    toast(e.target.value === "0" ? "No alerts for calendar events" : `Alerts ${e.target.selectedOptions[0].textContent} each event`);
   });
   root.querySelector("#n-desktop").addEventListener("change", async (e) => {
     await api.patch("/notifications/settings", { notify_desktop: e.target.checked });

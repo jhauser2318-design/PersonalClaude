@@ -127,6 +127,13 @@ def collect(conn, now: datetime) -> int:
         if body:
             _add(conn, "briefing", "☀️ Your day", body, "dashboard", None, f"briefing:{today.isoformat()}", now)
 
+    # Schedule blocks with "notify me" on, and Google Calendar events (if alerts are on).
+    for check in (_block_reminders, _calendar_alerts):
+        try:
+            check(conn, now, today)
+        except Exception as e:  # noqa: BLE001 (tables missing, Google unreachable...): try next minute
+            log.debug("%s skipped: %s", check.__name__, e)
+
     # Birthdays, reach-out nudges, home upkeep, expiring documents, bills, weekly review.
     if now.strftime("%H:%M") >= "09:00":
         for check in (_birthdays, _reach_out, _maintenance, _important_dates, _bills):
@@ -140,6 +147,46 @@ def collect(conn, now: datetime) -> int:
         pass
 
     return conn.execute("SELECT COUNT(*) FROM notifications").fetchone()[0] - before
+
+
+def _block_reminders(conn, now, today):
+    """Schedule blocks with a reminder: at the start, or N minutes before."""
+    now_min = now.hour * 60 + now.minute
+    for b in conn.execute("SELECT * FROM schedule_blocks WHERE date = ? AND remind IS NOT NULL AND done = 0",
+                          (today.isoformat(),)).fetchall():
+        h, m = map(int, b["start"].split(":"))
+        start = h * 60 + m
+        if start - b["remind"] <= now_min <= start + 15:  # skip stale ones (e.g. the PC was asleep)
+            when = "Starting now" if now_min >= start else f"In {start - now_min} min"
+            _add(conn, "block", f"🗓 {b['title']}", f"{when} · {_fmt_time(b['start'])}–{_fmt_time(b['end'])}"
+                 + (f" · {b['notes']}" if b["notes"] else ""), "schedule", b["id"],
+                 f"block:{b['id']}:{today.isoformat()}:{b['start']}", now)
+
+
+def _calendar_alerts(conn, now, today):
+    """Google Calendar events: an alert N minutes before (Follow-ups → Notifications)."""
+    lead = int(get_setting(conn, "notify_calendar") or 0)
+    if not lead or not (ROOT / "data" / "google_token.json").exists():
+        return
+    import json as _json
+    cached = get_setting(conn, "calendar_alert_cache")
+    data = _json.loads(cached) if cached else {}
+    if not data or data.get("fetched", "") < (now - timedelta(minutes=15)).isoformat(timespec="minutes") \
+            or data.get("day") != today.isoformat():
+        from .modules.calendar import service as cal  # only loaded when alerts are on
+        events = [e for e in cal.list_events(today, 2) if not e["all_day"]]
+        data = {"fetched": now.isoformat(timespec="minutes"), "day": today.isoformat(),
+                "events": [{"id": e["id"], "title": e["title"], "start": e["start"], "end": e["end"],
+                            "location": e.get("location") or ""} for e in events]}
+        set_setting(conn, "calendar_alert_cache", _json.dumps(data))
+    for e in data["events"]:
+        start = datetime.fromisoformat(e["start"][:16])
+        if start - timedelta(minutes=lead) <= now <= start + timedelta(minutes=5):
+            mins = int((start - now).total_seconds() // 60)
+            when = "Starting now" if mins <= 0 else f"In {mins} min"
+            _add(conn, "event", f"📅 {e['title']}", f"{when} · {_fmt_time(e['start'][11:16])}"
+                 + (f" · {e['location']}" if e["location"] else ""), "calendar", None,
+                 f"event:{e['id']}:{e['start']}", now)
 
 
 def _birthdays(conn, now, today):
@@ -305,7 +352,7 @@ def _applescript(text: str) -> str:
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-URGENT = ("task", "followup", "routine")  # timed reminders: pop up right away on the phone too
+URGENT = ("task", "followup", "routine", "block", "event")  # timed reminders: pop up right away on the phone too
 
 
 def _phone_url(link: str) -> str:
@@ -476,3 +523,34 @@ def task_installed() -> bool | None:
     result = subprocess.run(["schtasks", "/Query", "/TN", TASK_NAME], capture_output=True, timeout=30,
                             creationflags=NO_WINDOW)
     return result.returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# Is the PC set to sleep? (Reminders can't be sent while it's asleep.)
+# ---------------------------------------------------------------------------
+
+def sleep_status() -> dict:
+    """Minutes until Windows puts the PC to sleep: {"supported", "ac", "dc"} (0 = never)."""
+    if os.name != "nt":
+        return {"supported": False}
+    import re
+    try:
+        out = subprocess.run(["powercfg", "/query", "SCHEME_CURRENT", "SUB_SLEEP", "STANDBYIDLE"], capture_output=True,
+                             text=True, timeout=20, creationflags=NO_WINDOW).stdout
+        hexes = re.findall(r"0x([0-9a-fA-F]{8})", out)
+        ac, dc = (int(h, 16) // 60 for h in hexes[-2:])  # the last two values are "plugged in" and "on battery"
+        return {"supported": True, "ac": ac, "dc": dc}
+    except Exception as e:  # noqa: BLE001 (older Windows, unusual output): just don't warn
+        log.warning("Couldn't read the sleep setting: %s", e)
+        return {"supported": False}
+
+
+def keep_awake_when_plugged_in() -> None:
+    """Windows setting 'When plugged in, put my device to sleep after: Never' (battery setting unchanged)."""
+    if os.name != "nt":
+        raise RuntimeError("This only applies to Windows.")
+    r = subprocess.run(["powercfg", "/change", "standby-timeout-ac", "0"], capture_output=True, text=True,
+                       timeout=20, creationflags=NO_WINDOW)
+    if r.returncode != 0:
+        raise RuntimeError("Windows didn't allow the change. Open Settings → System → Power & battery → Screen and sleep, "
+                           "and set “When plugged in, put my device to sleep after” to Never.")

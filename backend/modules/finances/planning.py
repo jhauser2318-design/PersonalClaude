@@ -264,3 +264,31 @@ def savings_overview(conn) -> dict:
             "total_target": round(sum(g["target"] for g in goals), 2),
             "total_saved": round(sum(g["saved"] for g in goals), 2),
             "monthly_needed": round(sum(g["monthly_needed"] or 0 for g in goals), 2)}
+
+
+def add_to_savings(conn, goal_id: int, amount: float) -> dict:
+    """Put money toward a savings goal that's tracked by hand."""
+    row = conn.execute("SELECT * FROM fin_savings_goals WHERE id = ?", (goal_id,)).fetchone()
+    if not row:
+        raise ValidationError("That savings goal doesn't exist")
+    if row["account_id"]:
+        raise ValidationError("That goal follows a bank account's balance, so it updates by itself with each sync")
+    conn.execute("UPDATE fin_savings_goals SET saved = ROUND(saved + ?, 2) WHERE id = ?", (float(amount), goal_id))
+    g = _goal(conn, conn.execute("SELECT * FROM fin_savings_goals WHERE id = ?", (goal_id,)).fetchone())
+    if g["goal_id"]:
+        conn.execute("UPDATE goals SET progress = ?, updated_at = ? WHERE id = ?", (g["pct"], now_iso(), g["goal_id"]))
+    return g
+
+
+def context_line(conn) -> str:
+    """For the AI bar: bills you added and savings goals (with ids)."""
+    parts = []
+    bills = list_bills(conn)
+    if bills:
+        parts.append("BILLS you added (id | name | amount | due day | how often): " + "; ".join(
+            f"#{b['id']} {b['name']} ${b['amount']:,.2f} day {b['due_day']} {b['frequency']}" for b in bills))
+    goals = list_savings(conn)
+    if goals:
+        parts.append("SAVINGS GOALS (id | name | saved / target | by hand or from an account): " + "; ".join(
+            f"#{g['id']} {g['name']} ${g['saved']:,.0f}/${g['target']:,.0f} {'account' if g['linked'] else 'by hand'}" for g in goals))
+    return "\n".join(parts)

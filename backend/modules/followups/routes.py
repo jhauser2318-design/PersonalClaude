@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
@@ -43,6 +43,7 @@ class SettingsIn(BaseModel):
     notify_briefing: str | None = None
     notify_budget: bool | None = None
     notify_desktop: bool | None = None
+    notify_calendar: int | None = None
 
 
 def _run(fn, *args, real: bool = False, **kwargs):
@@ -275,3 +276,20 @@ def push_unsubscribe(body: EndpointIn):
 def push_forget(device_id: int):
     _push_run(push.unsubscribe, None, device_id)
     return {"ok": True}
+
+
+@router.get("/notifications/sleep")
+async def sleep_status():
+    return await run_in_threadpool(notify.sleep_status)
+
+
+@router.post("/notifications/sleep/keep-awake")
+async def keep_awake(request: Request):
+    from ..remote import auth as remote_auth
+    if remote_auth.is_remote(request.headers):
+        raise HTTPException(status_code=403, detail="Change this on your PC.")
+    try:
+        await run_in_threadpool(notify.keep_awake_when_plugged_in)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return await run_in_threadpool(notify.sleep_status)

@@ -3,6 +3,7 @@ import { api, sync } from "./api.js";
 import { icon } from "./icons.js";
 import { AREA_PAGES, EXTRA_ROUTES, GROUPS, MODULES } from "./modules.js";
 import { setupFocus } from "./focus.js";
+import { setupSearch } from "./search.js";
 import { deviceState, enablePush, isStandalone, setupPush } from "./push.js";
 import { setAreas, state } from "./state.js";
 import { esc, toast } from "./ui.js";
@@ -288,6 +289,7 @@ async function start() {
   $("#scrim").addEventListener("click", () => openMenu(false));
   setupCommandBar();
   setupFocus();
+  setupSearch();
   setupPush();
   try {
     setAreas(await api.get("/areas"));

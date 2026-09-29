@@ -173,6 +173,7 @@ If Claude isn't sure what you mean (for example, two goals could match), it **as
 - **Drag** common blocks (Work, Gym, Study, CPA study…) from the top of the Schedule onto a time. Drag a block to move it, or drag its bottom edge to change its length (on your phone, use the ⋮⋮ grip). Edit the list of common blocks with the pencil next to them.
 - Plan a day the way you like it, then **Save this day as a typical day** and pick weekdays (e.g. Workday = Mon–Fri). New days fill in from it automatically.
 - Tell the AI bar “Gym 6–7am tomorrow and CPA study 7–9pm” or “Plan my afternoon around my meetings”.
+- **Reminders for blocks:** open a block and pick **Notify me** (at the start, or 5–60 minutes before). Common blocks and typical days can carry a reminder too, and the AI bar understands “CPA study 7–9pm, remind me 10 minutes before”.
 - The **timer button** at the top starts a focus session (25/50/90 minutes). Link it to a routine and the time counts toward it (50 minutes = 0.83 hours of CPA study).
 
 ### More pages
@@ -184,6 +185,10 @@ If Claude isn't sure what you mean (for example, two goals could match), it **as
 - **Home maintenance** (under Health in the sidebar): one-time jobs (fix the leaky faucet, with an optional due date) and upkeep that repeats (HVAC filter, oil change) with the next due date, and important dates and documents (passport, registration, insurance) with a heads-up ahead of time.
 - **Finances → Bills**: a month calendar of bills (found from your transactions, your loans, and ones you add), a subscriptions list with the yearly cost of each and a “cancel it” list. A reminder comes 2 days before each bill.
 - **Finances → Savings**: savings goals with the monthly amount needed to hit each target date; link one to a savings account and it updates with every sync.
+
+**Search:** the 🔍 button at the top (or **Ctrl+K**) searches tasks, goals and notes, routines, your schedule, follow-ups, people, fun, home maintenance, shopping, bills and transactions.
+
+**More AI bar commands:** “Add a job: fix the faucet by Friday”, “Changed the HVAC filter, $24”, “Rent is $1,450 on the 1st”, “Put $200 toward the Lisbon trip”.
 
 The Dashboard now shows today's plan and a heads-up list (birthdays, bills, things due).
 
@@ -258,6 +263,10 @@ Using it:
 How it works: turning notifications on adds a small Windows scheduled task, "Life Control Center reminders", that checks once a minute whether anything is due. It runs while you're signed in to Windows, **even when the app window is closed**, and uses almost no power. Click a notification to open the app on the right page. If the computer was off at reminder time, the reminder shows up as soon as you sign in again (up to a day late). Each morning the check also syncs your bank accounts, so budget alerts don't wait for you to open the app. **Turn off** removes the scheduled task.
 
 The **Follow-ups** page lists "I need to…" and "Waiting on…" items, every upcoming reminder, and recent notifications.
+
+More notification options on the same card:
+- **Google Calendar events:** an alert 5, 10, 15, 30 or 60 minutes before each event (off by default).
+- **Sleep check:** if the PC is set to go to sleep while plugged in, the card says so (reminders can't be sent while it sleeps) and offers **Keep awake when plugged in**. That changes only the “plugged in” sleep setting; the screen still turns off, and on battery it still sleeps.
 
 #### Notifications on your iPhone
 

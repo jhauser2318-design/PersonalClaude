@@ -1,8 +1,8 @@
 // Finances → Bills (a month calendar of bills and subscriptions) and
 // Savings (goals with how much to put away each month).
-import { api } from "../api.js";
-import { icon } from "../icons.js";
-import { esc, fmtDate, openDialog, showError, toast, todayISO } from "../ui.js";
+import { api } from "../../api.js";
+import { icon } from "../../icons.js";
+import { esc, fmtDate, openDialog, showError, toast, todayISO } from "../../ui.js";
 
 const money = (n, cents = true) => (n ?? 0).toLocaleString(undefined, {
   style: "currency", currency: "USD", minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: cents ? 2 : 0,

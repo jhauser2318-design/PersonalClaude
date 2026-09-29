@@ -268,6 +268,8 @@ More notification options on the same card:
 - **Google Calendar events:** an alert 5, 10, 15, 30 or 60 minutes before each event (off by default).
 - **Sleep check:** if the PC is set to go to sleep while plugged in, the card says so (reminders can't be sent while it sleeps) and offers **Keep awake when plugged in**. That changes only the “plugged in” sleep setting; the screen still turns off, and on battery it still sleeps.
 
+On the phone, a **tab bar** at the bottom has Home, Schedule, Tasks and Money; **More** opens the full menu (a red dot means something there needs attention).
+
 #### Notifications on your iPhone
 
 Your reminders can also pop up on your iPhone's lock screen, like any other app, even when the app is closed. Needs iOS 16.4 or newer and phone access (Tailscale) already set up.

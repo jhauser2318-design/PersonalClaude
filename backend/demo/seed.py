@@ -16,6 +16,7 @@ from ..modules.cpa import service as cpa
 from ..modules.finances import planning
 from ..modules.fun import service as fun
 from ..modules.home import service as home
+from ..modules.journal import service as journal
 from ..modules.people import service as people
 from ..modules.review import service as review
 from ..modules.schedule import service as schedule
@@ -351,6 +352,19 @@ def _seed_life(conn, today: date, rnd: random.Random, g: dict) -> None:
     for title, cat in [("Chicago food tour", "food"), ("Try indoor climbing", "sports"), ("Architecture boat tour", "outdoors"),
                        ("Comedy show at Second City", "shows"), ("Weekend in Door County", "travel")]:
         fun.add_idea(conn, title, cat)
+
+    # --- Journal (the last couple of weeks, with a few gaps) -------------------------
+    for back, mood, text in [
+        (-1, 4, "Good day. Knocked out the dashboard migration review before lunch and the team liked the new layout.\n\nFAR practice after dinner: still slow on governmental funds. Going to do 20 more MCQs on that tomorrow."),
+        (-2, 3, "Long meetings. Didn't get to the gym, so I walked at lunch instead. Called Mom, she sounded good."),
+        (-3, 5, "Ramen crawl with Jake and Priya. Laughed way too much. Need more nights like this."),
+        (-5, 2, "Tired and a bit behind. Skipped CPA study. Tomorrow: bed by 11, gym first thing."),
+        (-6, 4, "Back on track. Gym, deep work block, 2 hours of FAR. Felt good to stick to the plan."),
+        (-8, 4, "Weekend reset: groceries, meal prep, cleaned the apartment. Started the new book."),
+        (-9, 3, "Practice exam: 71%. Better than last time. Leases and bonds are the weak spots."),
+        (-12, 4, "Board games at home with Sam and Jordan. Wingspan is great."),
+    ]:
+        journal.save_entry(conn, D(back), text, mood)
 
     # --- Home maintenance-------------------------------------------------------------
     for name, cat, n, unit, last, notes in [

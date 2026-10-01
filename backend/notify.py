@@ -141,10 +141,11 @@ def collect(conn, now: datetime) -> int:
                 check(conn, now, today)
             except sqlite3.OperationalError:  # that module's tables don't exist yet
                 pass
-    try:
-        _weekly_review(conn, now, today)
-    except sqlite3.OperationalError:
-        pass
+    for check in (_weekly_review, _journal):
+        try:
+            check(conn, now, today)
+        except sqlite3.OperationalError:
+            pass
 
     return conn.execute("SELECT COUNT(*) FROM notifications").fetchone()[0] - before
 
@@ -264,6 +265,18 @@ def _weekly_review(conn, now, today):
         return
     _add(conn, "review", "📝 Time for your weekly review", "10 minutes: look back at the week and pick next week's priorities",
          "review", None, f"review:{week}", now)
+
+
+def _journal(conn, now, today):
+    """A nudge at night to write today's journal entry (if it isn't written yet)."""
+    at = get_setting(conn, "journal_remind")
+    at = "21:30" if at is None else at
+    if not at or now.strftime("%H:%M") < at:
+        return
+    if conn.execute("SELECT 1 FROM journal_entries WHERE date = ?", (today.isoformat(),)).fetchone():
+        return
+    _add(conn, "journal", "📓 Time to journal", "A few lines about today, before bed",
+         "journal", None, f"journal:{today.isoformat()}", now)
 
 
 def briefing(conn, today: date) -> str:

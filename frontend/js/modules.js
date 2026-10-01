@@ -12,6 +12,7 @@ import * as followups from "./views/followups.js";
 import * as fun from "./views/fun.js";
 import * as goals from "./views/goals.js";
 import * as home from "./views/home.js";
+import * as journal from "./views/journal.js";
 import * as people from "./views/people.js";
 import * as review from "./views/review.js";
 import * as routines from "./views/routines.js";
@@ -31,6 +32,7 @@ export const MODULES = [
   { id: "calendar", label: "Calendar", icon: "calendar", view: calendar, group: "Plan" },
   { id: "review", label: "Weekly review", icon: "review", view: review, group: "Plan" },
   { id: "people", label: "People", icon: "users", view: people, group: "Life" },
+  { id: "journal", label: "Journal", icon: "journal", view: journal, group: "Life" },
   { id: "fun", label: "Fun", icon: "sparkle", view: fun, group: "Life" },
   { id: "followups", label: "Follow-ups", icon: "bell", view: followups, group: "Life" },
   { id: "email", label: "Email", icon: "mail", view: email, group: "Life" },

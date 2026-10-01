@@ -7,7 +7,7 @@ A personal dashboard that runs on your own computer and opens in your web browse
 - Four life areas, each with its own color: **Work**, **Health**, **Social**, **Education**.
 - **Goals** with a status, a progress %, an optional target date, and a timestamped history of updates.
 - **Tasks**: small action steps with a priority and an optional due date. A task can belong to a goal.
-- **Routines**: recurring tasks such as the gym, skincare or CPA study. Each one runs every day, on chosen days, or N times a week, with an optional daily target (e.g. 2 hours). The app tracks streaks, best streaks, 30-day completion and a 12-week history grid.
+- **Routines**: recurring tasks such as the gym, skincare or CPA study. Each one runs every day, on chosen days, or N times a week, with an optional daily target (e.g. 2 hours). The app tracks streaks, best streaks, 30-day completion and a 12-week history grid. Forgot to check one off? Tap any past day on the grid (or the 📅 button) to mark it done, change the amount, or undo it.
 - **Calendar**: your **Google Calendar** inside the app. A week view of your events next to the tasks due each day; add, edit or delete events, and changes show up on your phone.
 - **Email**: ask the AI about your **Gmail** ("What did Sarah say about the budget?", "Any bills due?") and have it draft emails and replies. You always review a draft and click **Send** yourself.
 - **Shopping list**: **needs** are a simple checklist to tick off (type one and press Enter; no prices), and **wants** have what it is, a price and a link to the store, with a running total. Bought items move to a "Bought" list; paste a link to fill in a want's name and price.

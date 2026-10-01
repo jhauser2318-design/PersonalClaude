@@ -103,6 +103,13 @@ def log_habit(habit_id: int, body: LogIn):
     return _run(service.get_habit, habit_id)
 
 
+@router.get("/{habit_id}/log")
+def get_log(habit_id: int, date: str):
+    """One day's check-off (for going back and fixing a day)."""
+    log = _run(service.get_log, habit_id, date)
+    return {**log, "logged": True} if log else {"date": date, "amount": None, "note": "", "logged": False}
+
+
 @router.delete("/{habit_id}/log")
 def unlog_habit(habit_id: int, date: str | None = None):
     _run(service.unlog_habit, habit_id, date)

@@ -3,7 +3,7 @@
 import { api } from "./api.js";
 import { icon } from "./icons.js";
 import { state } from "./state.js";
-import { areaOptions, areaStyle, areaTag, esc, openDialog, showError, toast } from "./ui.js";
+import { areaOptions, areaStyle, areaTag, esc, fmtDate, openDialog, showError, toast, todayISO } from "./ui.js";
 
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -74,6 +74,7 @@ export function routineCard(h) {
           ${h.active ? "" : `<span class="pill paused">Paused</span>`}</div>
       </div>
       <div class="rt-actions">
+        <button class="icon-btn" data-backfill title="Check off a past day" aria-label="Check off a past day">${icon("calendar")}</button>
         <button class="icon-btn" data-pause title="${h.active ? "Pause" : "Resume"}" aria-label="${h.active ? "Pause" : "Resume"} routine">${icon(h.active ? "pause" : "play")}</button>
         <button class="icon-btn" data-edit title="Edit" aria-label="Edit routine">${icon("edit")}</button>
       </div>
@@ -93,9 +94,10 @@ export function routineCard(h) {
       </form>` : ""}
     <div class="heat-wrap" aria-label="Last 12 weeks">
       <div class="heat-days">${DAY_LETTERS.map((d, i) => `<span>${i % 2 === 0 ? d : ""}</span>`).join("")}</div>
-      <div class="heat">${h.history.map((d) =>
-        `<span class="${d.state}" title="${d.date}${d.amount != null ? ` · ${fmtAmount(d.amount)} ${esc(h.unit || "")}` : ""}${d.state === "missed" ? " · missed" : ""}"></span>`).join("")}</div>
-      <div class="heat-caption">LAST<br>12 WEEKS</div>
+      <div class="heat">${h.history.map((d) => d.state === "future" ? `<span class="future"></span>`
+        : `<button type="button" class="${d.state}" data-day="${d.date}" title="${d.date}${d.amount != null ? ` · ${fmtAmount(d.amount)} ${esc(h.unit || "")}` : ""}${d.state === "missed" ? " · missed" : ""} · tap to change"
+            aria-label="${esc(h.title)}, ${d.date}: ${d.state}"></button>`).join("")}</div>
+      <div class="heat-caption">LAST<br>12 WEEKS<br><span class="heat-tip">tap a day<br>to fix it</span></div>
     </div>
   </article>`;
 }
@@ -118,6 +120,11 @@ export function bindRoutines(container, habits, onChange = () => state.refresh()
           toast(updated.streak > 1 ? `🔥 ${updated.streak} streak! Nice.` : `“${h.title}” done ✓`);
         }
         onChange();
+      } else if (e.target.closest("[data-day]")) {
+        openDayLog(h, e.target.closest("[data-day]").dataset.day, onChange);
+      } else if (e.target.closest("[data-backfill]")) {
+        const y = new Date(Date.now() - 864e5);
+        openDayLog(h, `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, "0")}-${String(y.getDate()).padStart(2, "0")}`, onChange);
       } else if (e.target.closest("[data-edit]")) {
         openRoutineEditor(h, onChange);
       } else if (e.target.closest("[data-pause]")) {
@@ -235,4 +242,63 @@ export async function openRoutineEditor(h = {}, onChange = () => state.refresh()
     } catch (err) { showError(form, err); }
   });
   form.title.focus();
+}
+
+// ---------- Check off (or fix) any past day ----------
+export function openDayLog(h, day, onChange = () => state.refresh()) {
+  const amountBased = !!h.target_amount;
+  const dlg = openDialog({
+    title: esc(h.title), style: areaStyle(h.area),
+    body: `<form id="day-log" class="dlg-body" style="padding:0">
+      <label class="field"><span>Day</span><input type="date" name="date" value="${esc(day)}" max="${todayISO()}" required></label>
+      <p class="day-status muted small" style="margin:0">Loading…</p>
+      ${amountBased ? `<label class="field"><span>How much (${esc(h.unit || "")}, goal ${fmtAmount(h.target_amount)})</span>
+        <input type="number" name="amount" min="0" step="0.25" value="${fmtAmount(h.target_amount)}"></label>` : ""}
+      <label class="field"><span>Note (optional)</span><input type="text" name="note" placeholder="e.g. did it at lunch"></label>
+    </form>`,
+    foot: `<button class="btn danger" data-unlog hidden>Undo this day</button>
+      <div class="right"><button class="btn" data-close>Cancel</button>
+      <button class="btn primary" type="submit" form="day-log">${icon("tick")} Mark done</button></div>`,
+  });
+  const form = dlg.querySelector("form");
+  const status = dlg.querySelector(".day-status");
+  const unlog = dlg.querySelector("[data-unlog]");
+  const save = dlg.querySelector('[type="submit"]');
+  const load = async () => {
+    const d = form.date.value;
+    if (!d) return;
+    status.textContent = "Loading…";
+    try {
+      const log = await api.get(`/habits/${h.id}/log?date=${d}`);
+      const logged = log.logged !== false;
+      status.textContent = logged
+        ? `${fmtDate(d)}: checked off${log.amount != null && amountBased ? ` (${fmtAmount(log.amount)} ${h.unit || ""})` : ""} ✓`
+        : `${fmtDate(d)}: not checked off yet.`;
+      unlog.hidden = !logged;
+      save.innerHTML = `${icon("tick")} ${logged ? "Save" : "Mark done"}`;
+      if (amountBased) form.amount.value = fmtAmount(logged && log.amount != null ? log.amount : h.target_amount);
+      form.note.value = logged ? log.note || "" : "";
+    } catch (err) { status.textContent = err.message; }
+  };
+  form.date.addEventListener("change", load);
+  load();
+  unlog.onclick = async () => {
+    try {
+      await api.del(`/habits/${h.id}/log?date=${form.date.value}`);
+      dlg.close();
+      toast(`“${h.title}” unchecked for ${fmtDate(form.date.value)}`);
+      onChange();
+    } catch (err) { showError(form, err); }
+  };
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const body = { date: form.date.value, note: form.note.value.trim() };
+    if (amountBased) body.amount = Number(form.amount.value || 0);
+    try {
+      await api.post(`/habits/${h.id}/log`, body);
+      dlg.close();
+      toast(`“${h.title}” checked off for ${fmtDate(body.date)} ✓`);
+      onChange();
+    } catch (err) { showError(form, err); }
+  });
 }

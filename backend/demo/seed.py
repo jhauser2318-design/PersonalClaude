@@ -177,7 +177,8 @@ def _seed_finances(conn, today: date, rnd: random.Random) -> None:
         payday -= timedelta(days=14)
 
     for m in range(4):
-        base = (today.replace(day=1) - timedelta(days=31 * m)).replace(day=1)
+        y, mo = divmod(today.year * 12 + today.month - 1 - m, 12)  # m months back (subtracting days can skip a month)
+        base = date(y, mo + 1, 1)
 
         def day_of(n):
             return base.replace(day=min(n, 28))

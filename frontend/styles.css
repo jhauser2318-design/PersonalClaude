@@ -1219,6 +1219,43 @@ input[type=range] { width: 100%; accent-color: var(--area, var(--accent)); }
 .star-input button.on { color: var(--warning); text-shadow: 0 0 10px rgba(251, 191, 36, .4); }
 @media (max-width: 1080px) { .fun-cols { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .fun-bars li { grid-template-columns: 120px 1fr 24px; } }
+/* Journal */
+.jr-remind { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); }
+.jr-remind svg { width: 16px; height: 16px; }
+.jr-remind select { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; }
+.jr-cols { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+.jr-side { display: flex; flex-direction: column; gap: 14px; }
+.jr-editor { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.jr-nav { display: flex; align-items: center; gap: 8px; }
+.jr-day { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.jr-day b { font: 600 18px var(--font-display); }
+.jr-day span { font-size: 12.5px; color: var(--text-3); }
+.jr-nav input[type=date] { flex: none; width: auto; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 8px; }
+.jr-moods { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.jr-moods span { margin-right: 6px; }
+.jr-moods button { border: 1px solid transparent; background: none; font-size: 24px; line-height: 1; padding: 4px 6px; border-radius: 10px; cursor: pointer; filter: grayscale(1); opacity: .5; transition: .15s; }
+.jr-moods button:hover { opacity: .9; filter: none; }
+.jr-moods button.on { filter: none; opacity: 1; background: var(--surface-2); border-color: var(--border-strong); }
+#jr-body { width: 100%; min-height: 46vh; resize: vertical; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 16px; font-size: 16px; line-height: 1.65; }
+#jr-body:focus { outline: none; border-color: var(--accent); }
+.jr-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 32px; }
+.jr-search input { width: 100%; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; margin-bottom: 8px; }
+.jr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; }
+.jr-list button { width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; }
+.jr-list button:hover { background: var(--surface-2); }
+.jr-list button.on { background: var(--surface-2); border-color: var(--border-strong); }
+.jr-li-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.jr-li-head em { margin-left: auto; font: 500 11px var(--font-mono); font-style: normal; color: var(--text-3); }
+.jr-li-text { font-size: 12.5px; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.jr-lookback { cursor: pointer; }
+.jr-lookback p { margin: 0; font-size: 13.5px; color: var(--text-2); line-height: 1.55; white-space: pre-line; }
+@media (max-width: 1080px) { .jr-cols { grid-template-columns: 1fr; } .jr-list { max-height: none; } }
+@media (max-width: 560px) {
+  .jr-editor { padding: 14px; } #jr-body { min-height: 40vh; }
+  .jr-nav { flex-wrap: wrap; } .jr-nav input[type=date] { order: 9; flex: 1 1 100%; }
+  .jr-moods { gap: 0; flex-wrap: nowrap; } .jr-moods span { font-size: 12px; } .jr-moods button { font-size: 22px; padding: 4px; }
+}
 .job-check { width: 18px; height: 18px; accent-color: var(--success); flex: none; cursor: pointer; margin: 0; }
 .job-row .fin-li-sub .dot { display: inline-block; }
 .job-done summary { cursor: pointer; color: var(--text-3); font: 600 12px var(--font-mono); text-transform: uppercase; letter-spacing: .08em; margin-top: 10px; }

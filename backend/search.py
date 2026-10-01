@@ -18,6 +18,8 @@ SOURCES = [
     ("Fun", "SELECT title, date || COALESCE(' · ' || NULLIF(with_whom, ''), ''), 'fun' FROM fun_log "
             "WHERE title LIKE ? OR with_whom LIKE ? OR place LIKE ? OR notes LIKE ? ORDER BY date DESC LIMIT 6", 4),
     ("Fun ideas", "SELECT title, 'idea', 'fun' FROM fun_ideas WHERE done_at IS NULL AND title LIKE ? LIMIT 4", 1),
+    ("Journal", "SELECT substr(replace(body, char(10), ' '), 1, 90), date, 'journal/' || date FROM journal_entries "
+                "WHERE body LIKE ? ORDER BY date DESC LIMIT 6", 1),
     ("Home maintenance", "SELECT name, CASE WHEN one_time THEN 'one-time job' ELSE 'repeating' END, 'home' FROM maintenance "
                          "WHERE name LIKE ? OR notes LIKE ? LIMIT 6", 2),
     ("Important dates", "SELECT name, 'expires ' || date, 'home/dates' FROM important_dates WHERE name LIKE ? OR notes LIKE ? LIMIT 5", 2),

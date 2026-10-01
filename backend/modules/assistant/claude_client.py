@@ -23,7 +23,7 @@ ACTION_TYPES = ["create_goal", "update_goal", "add_note", "create_task", "update
                 "create_followup", "update_followup", "set_reminder",
                 "add_schedule_block", "update_schedule_block", "remove_schedule_block",
                 "log_cpa_score", "add_person", "log_contact", "log_fun", "add_fun_idea",
-                "add_home_job", "complete_home_item", "add_bill", "add_to_savings"]
+                "add_home_job", "complete_home_item", "add_bill", "add_to_savings", "add_journal"]
 
 
 # Every action field is always present, with a "blank" value when it doesn't
@@ -150,6 +150,9 @@ People:
 Fun & leisure (a log of fun things the user did, and ideas for later):
 - log_fun: something fun the user did ("went bowling with Sam last night, so fun", "concert at the Riviera Saturday, 5/5"). title = short name of the activity ("Bowling with Sam"); description = category, one of outdoors, friends, food, travel, games, shows, sports, creative, relax, other; date ("" = today); amount = how fun 1-5 if they say or it's clear ("amazing" = 5, "fine" = 3), else 0; person = who they were with, or ""; location = where, or ""; price = what it cost if said, else -1; note = extra detail (optional). If an idea in FUN ideas matches, still use log_fun (the app keeps both).
 - add_fun_idea: something fun they want to do some day ("I want to try axe throwing", "add a Chicago food tour to my fun ideas"). title, description = category, note (optional).
+
+Journal (private; you never see past entries):
+- add_journal: only when the user explicitly asks to put something in their journal ("journal: long day but the presentation went well", "add to my journal that I felt great after the run"). note = what to write, in their words (first person, lightly cleaned up, nothing invented); date ("" = today); amount = mood 1-5 only if they clearly say how the day felt, else 0. Never use it for anything they didn't ask to journal.
 
 Home maintenance (see HOME MAINTENANCE):
 - add_home_job: a one-time job around the house, car or health ("fix the leaky faucet by Friday", "get winter tires put on"). title; due_date (optional); description = category: home, car, health or other; note (optional).

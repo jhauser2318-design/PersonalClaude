@@ -19,6 +19,7 @@ from ..shopping import service as shopping
 from ..cpa import service as cpa
 from ..finances import planning
 from ..fun import service as fun
+from ..journal import service as journal
 from ..home import service as home
 from ..people import service as people
 from ..schedule import service as schedule
@@ -424,6 +425,15 @@ def _apply(conn, actions: list[dict], undo: list[dict]) -> tuple[list[dict], lis
             undo.append({"kind": "fun_idea", "id": idea["id"], "before": None})
             summary.append(f"💡 Added to your fun ideas: {idea['title']}")
 
+        elif kind == "add_journal":
+            before = journal.get_entry(conn, action.get("date"))
+            entry = journal.add_to_entry(conn, action.get("note") or action.get("title") or "", action.get("date"))
+            if action.get("amount") and 1 <= int(action["amount"]) <= 5:
+                entry = journal.save_entry(conn, entry["date"], mood=int(action["amount"]))
+            undo.append({"kind": "journal", "id": entry["id"],
+                         "before": {k: before[k] for k in ("body", "mood", "updated_at")} if before else None})
+            summary.append(f"📓 Added to your journal ({_day_label(entry['date'])})")
+
         elif kind == "add_home_job":
             cat = (action.get("description") or "home").lower()
             job = home.save_item(conn, {"name": action.get("title"), "one_time": True, "due_date": action.get("due_date"),
@@ -495,7 +505,7 @@ def undo_command(conn, log_id: int) -> str:
     tables = {"goal": "goals", "task": "tasks", "note": "goal_notes",
               "habit": "habits", "habit_log": "habit_logs", "shopping": "shopping_items",
               "followup": "followups", "block": "schedule_blocks", "cpa_score": "cpa_scores",
-              "person": "people", "interaction": "interactions", "fun": "fun_log", "fun_idea": "fun_ideas",
+              "person": "people", "interaction": "interactions", "fun": "fun_log", "fun_idea": "fun_ideas", "journal": "journal_entries",
               "home_item": "maintenance", "bill": "fin_bills", "savings": "fin_savings_goals"}
     # Undo in reverse order: the last change is reverted first.
     for change in reversed(json.loads(row["changes"])):

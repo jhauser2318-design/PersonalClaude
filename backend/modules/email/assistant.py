@@ -109,6 +109,20 @@ def _run_tool(name: str, args: dict, state: dict) -> str:
     raise ValueError(f"Unknown tool {name}")
 
 
+def _contacts() -> str:
+    """People from the People page who have an email address, so "email Mom" knows where to send."""
+    try:
+        from ...database import get_db
+        with get_db() as conn:
+            rows = conn.execute("SELECT name, relation, email FROM people WHERE email != '' ORDER BY name LIMIT 80").fetchall()
+    except Exception:  # noqa: BLE001 (People not set up yet)
+        return ""
+    if not rows:
+        return ""
+    return ("\nThe user's contacts (from their People page; use these addresses when they name someone): "
+            + "; ".join(f"{r['name']}{f' ({r[1]})' if r['relation'] else ''} <{r['email']}>" for r in rows) + ".")
+
+
 def ask(question: str, history: list[dict]) -> dict:
     """Answer an email question. Returns {"answer", "sources", "draft"}."""
     gmail.require_gmail()
@@ -117,7 +131,7 @@ def ask(question: str, history: list[dict]) -> dict:
 
     me = gmail.my_address()
     intro = (f"Today is {date.today().strftime('%A')}, {date.today().isoformat()}. "
-             f"The user's email address is {me}.")
+             f"The user's email address is {me}.") + _contacts()
     messages = []
     for turn in history[-6:]:
         if turn.get("role") in ("user", "assistant") and turn.get("content"):

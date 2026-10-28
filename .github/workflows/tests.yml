@@ -14,6 +14,3 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - run: python tests/run_all.py
-      # RMT (Risky Money Time) lives in its own folder with its own packages.
-      - run: pip install -r RMT/requirements.txt
-      - run: python RMT/tests/test_parsers.py

@@ -124,6 +124,8 @@ export function openAccountEditor(acc, onChange) {
             `<option value="${k}" ${k === acc.kind ? "selected" : ""}>${k === "credit" ? "credit card" : k}</option>`).join("")}</select></label>
         <label class="fin-check"><input type="checkbox" name="hidden" ${acc.hidden ? "checked" : ""}>
           <span>Hide this account (leave it out of balances, totals and reports)</span></label>
+        <label class="fin-check"><input type="checkbox" name="flip" ${acc.flip ? "checked" : ""}>
+          <span>Balance shows what I owe as a positive number (turn this on if a card or loan is being counted as money you have)</span></label>
       </form>`,
     foot: `<div class="right"><button class="btn" data-close>Cancel</button>
       <button class="btn primary" type="submit" form="acc-form">Save</button></div>`,
@@ -133,7 +135,7 @@ export function openAccountEditor(acc, onChange) {
     e.preventDefault();
     try {
       await api.patch(`/finances/accounts/${encodeURIComponent(acc.id)}`, {
-        nickname: form.nickname.value, kind: form.kind.value, hidden: form.hidden.checked,
+        nickname: form.nickname.value, kind: form.kind.value, hidden: form.hidden.checked, flip: form.flip.checked,
       });
       dlg.close();
       toast("Saved");
@@ -147,6 +149,8 @@ export function openDisconnect(root) {
     title: "SimpleFIN connection",
     body: `<p>Disconnecting stops syncing. The app forgets its access link; you can connect again later with a new Setup Token.
       To fully revoke access, also remove this app on the SimpleFIN Bridge website.</p>
+      <p><a class="btn small" href="https://beta-bridge.simplefin.org/" target="_blank" rel="noopener">${icon("link")} Open SimpleFIN Bridge</a>
+        <span class="muted small">to fix, add or remove bank connections</span></p>
       <label class="fin-check"><input type="checkbox" id="del-data"><span>Also delete all synced finance data from this computer</span></label>`,
     foot: `<div class="right"><button class="btn" data-close>Cancel</button>
       <button class="btn danger" id="do-disconnect">Disconnect</button></div>`,

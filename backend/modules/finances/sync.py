@@ -55,6 +55,13 @@ def _sync() -> dict:
     start_ts = datetime.combine(start, datetime.min.time()).timestamp()
     try:
         data = simplefin.fetch_accounts(start_ts)
+        # An account we haven't seen before (a new card, or a bank you reconnected)
+        # gets its full history, not just the last 2 weeks.
+        with get_db() as conn:
+            known = {r[0] for r in conn.execute("SELECT id FROM fin_accounts")}
+        if latest and any(str(a.get("id") or "") not in known for a in data["accounts"]):
+            full = datetime.combine(date.today() - timedelta(days=FIRST_SYNC_DAYS), datetime.min.time()).timestamp()
+            data = simplefin.fetch_accounts(full)
     except simplefin.FinanceError as e:
         with get_db() as conn:
             service.save_sync_status(conn, ok=False, error=str(e))

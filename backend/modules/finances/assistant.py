@@ -282,7 +282,10 @@ def _context(conn) -> str:
              "ACCOUNTS (id | bank | name | type | balance):"]
     for a in service.list_accounts(conn, include_hidden=False):
         lines.append(f"{a['id']} | {a['org']} | {a['display_name']} | {a['kind']} | ${a['balance']:,.2f}")
-    lines.append(f"Cash ${b['cash']:,.2f}; credit card debt ${b['debt']:,.2f}; net ${b['net']:,.2f}.")
+    lines.append(f"Cash ${b['cash']:,.2f}; credit card debt ${b['debt']:,.2f}; loans ${b['loans']:,.2f}; net ${b['net']:,.2f}.")
+    checks = service.net_worth_check(conn)
+    if checks:
+        lines.append("NET WORTH CHECK (possible problems; mention them if net worth comes up): " + " | ".join(c["text"] for c in checks))
     budgets = service.list_budgets(conn)
     lines += ["", "MONTHLY BUDGETS: " + (", ".join(f"{c} ${v:,.0f}" for c, v in budgets.items()) or "none set yet")]
     lines += ["", "CATEGORIES: " + ", ".join(service.CATEGORIES)]

@@ -16,6 +16,7 @@ const TABS = [
   ["overview", "Overview"], ["daily", "Daily"], ["transactions", "Transactions"], ["budgets", "Budgets"],
   ["bills", "Bills"], ["savings", "Savings"], ["loans", "Loans"], ["rules", "Rules"], ["reports", "Reports & questions"],
 ];
+const SIMPLEFIN_URL = "https://beta-bridge.simplefin.org/";
 let pollTimer;
 // ===========================================================================
 // Page
@@ -38,11 +39,13 @@ export async function render(view, arg) {
       <h1>Finances</h1>
       <div class="status-chips" id="fin-chips">${chips(status)}</div></div>
       <div class="fin-head-actions">
+        <a class="btn" href="${SIMPLEFIN_URL}" target="_blank" rel="noopener" title="Sign in to SimpleFIN Bridge to fix or add bank connections">${icon("link")} SimpleFIN</a>
         <button class="btn" id="fin-sync">${icon("refresh")} Sync now</button>
       </div></div>
     ${status.last_error ? `<div class="fin-alert danger">${esc(status.last_error)}</div>` : ""}
     ${status.messages?.length ? `<div class="fin-alert">${status.messages.map((m) => `<div>${esc(m)}</div>`).join("")}
-      <div class="muted small">Fix connection problems on the SimpleFIN Bridge website; the app picks the fix up on the next sync.</div></div>` : ""}
+      <div class="fin-alert-foot"><a class="btn small primary" href="${SIMPLEFIN_URL}" target="_blank" rel="noopener">${icon("link")} Sign in to SimpleFIN to fix it</a>
+        <span class="muted small">Reconnect the bank there, then tap <b>Sync now</b> here.</span></div></div>` : ""}
     <div class="segmented fin-tabs" role="tablist">${TABS.map(([id, label]) =>
       `<button data-tab="${id}" class="${ui.tab === id ? "active" : ""}" role="tab">${label}</button>`).join("")}</div>
     <div id="fin-tab"></div></div>`;
@@ -106,7 +109,7 @@ function renderSetup(view, status) {
     <div class="card fin-setup">
       <h2>Connect with SimpleFIN</h2>
       <ol>
-        <li>Open <a href="https://beta-bridge.simplefin.org/" target="_blank" rel="noopener">SimpleFIN Bridge</a> and sign in
+        <li>Open <a href="${SIMPLEFIN_URL}" target="_blank" rel="noopener">SimpleFIN Bridge</a> and sign in
           (your banks and cards are already linked there).</li>
         <li>Create a new <b>Setup Token</b> for an app (look for “New app connection” or “Setup token”)
           and copy it. It's a long string of letters and numbers.</li>
@@ -180,7 +183,7 @@ async function renderOverview(box, root) {
       ${kpi("Net cash flow", signed(m.net), m.net >= 0 ? "var(--success)" : "var(--danger)", m.net >= 0 ? "you kept this much" : "spent more than came in")}
       ${budgetLeft != null
         ? kpi("Budget left", money(budgetLeft), budgetLeft >= 0 ? "var(--accent-2)" : "var(--danger)", `of ${money(m.budget_total, false)} budgeted`)
-        : kpi("Net worth (cash − cards)", signed(data.balances.net), "var(--accent-2)", "across your linked accounts")}
+        : kpi("Net worth", signed(data.balances.net), "var(--accent-2)", "cash − cards − loans")}
     </div>
     ${data.uncategorized ? `<div class="fin-alert">${data.uncategorized} transaction${data.uncategorized === 1 ? " isn't" : "s aren't"} sorted into a category yet.
       <button class="btn small" id="fin-cat">${icon("sparkle")} Sort with AI</button></div>` : ""}
@@ -266,10 +269,14 @@ function balancesCard(data) {
       ${b.loans ? `<div><div class="eyebrow">Loans</div><b>${money(b.loans)}</b></div>` : ""}
       <div><div class="eyebrow">Net</div><b class="${b.net >= 0 ? "pos" : "neg"}">${signed(b.net)}</b></div>
     </div>
+    ${data.checks?.length ? `<div class="fin-alert fin-checks"><b>Net worth check: ${data.checks.length} thing${data.checks.length === 1 ? "" : "s"} to look at</b>
+      <ul>${data.checks.map((c) => `<li>${esc(c.text)} <button class="btn small" data-account="${esc(c.account_ids[0])}">Edit</button></li>`).join("")}</ul></div>`
+      : data.accounts.length ? `<div class="fin-fine fin-ok">✓ Net worth check: no duplicate, out-of-date or miscounted accounts found.</div>` : ""}
     <ul class="fin-list">${data.accounts.map((a) => `
       <li class="${a.hidden ? "is-hidden" : ""}">
         <div><div class="fin-li-title">${esc(a.display_name)}${a.hidden ? ` <span class="pill">hidden</span>` : ""}</div>
-          <div class="fin-li-sub">${esc(a.org)} · ${esc(a.kind)}${a.balance_date ? ` · as of ${esc(fmtDate(a.balance_date))}` : ""}</div></div>
+          <div class="fin-li-sub">${esc(a.org)} · ${esc(a.kind === "credit" ? "card" : a.kind)}${a.balance_date ? ` · as of ${esc(fmtDate(a.balance_date))}` : ""}
+            · ${a.hidden ? "not counted" : a.kind === "credit" || a.kind === "loan" ? "subtracted" : "added"}</div></div>
         <b class="mono ${a.balance < 0 ? "neg" : ""}">${money(a.balance)}</b>
         <button class="icon-btn" data-account="${esc(a.id)}" aria-label="Edit account">${icon("edit")}</button></li>`).join("")}</ul>
     <div class="fin-card-foot"><button class="btn small" id="fin-disconnect">Connection…</button></div>`;

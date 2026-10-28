@@ -61,7 +61,9 @@ shown.clear()
 tomorrow = today + timedelta(days=1)
 with get_db() as c:
     for i in range(5):
-        fu.add_notification(c, "test", f"n{i}", created := None) if False else fu.add_notification(c, "test", f"n{i}")
+        fu.add_notification(c, "test", f"n{i}")
+    # stamp them "now" in the simulated time, so the test works at any hour of the real day
+    c.execute("UPDATE notifications SET created_at = ? WHERE kind = 'test'", (T(tomorrow, "07:00").isoformat(),))
 r = notify.run_once(T(tomorrow, "07:05"), sender); print("tomorrow", r, shown)
 assert len(shown) == 1 and "reminders" in shown[0][0]
 # stale notifications older than 24h are skipped

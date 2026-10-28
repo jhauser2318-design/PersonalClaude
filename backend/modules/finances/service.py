@@ -13,7 +13,7 @@ import json
 import re
 from datetime import date, datetime, timedelta
 
-from ...database import get_setting, register_schema, set_setting
+from ...database import add_column, get_setting, register_schema, set_setting
 from ..goals.service import ValidationError, now_iso
 
 CATEGORIES = [
@@ -97,6 +97,11 @@ register_schema(
     """
 )
 
+# When an account first showed up from SimpleFIN (to spot accounts that replaced an old copy).
+add_column("fin_accounts", "first_seen", "TEXT")
+# Some banks send a card's balance as a positive number when you owe; flip = 1 turns it around.
+add_column("fin_accounts", "flip", "INTEGER NOT NULL DEFAULT 0")
+
 # The category that counts for a transaction: your own choice, then "Transfer"
 # for matched pairs, then the merchant's category.
 # Activity inside a loan account (the payment arriving, interest added) just
@@ -134,7 +139,7 @@ def merchant_key(description: str, payee: str, amount: float) -> str:
 
 def _guess_kind(org: str, name: str, balance: float) -> str:
     text = f"{org} {name}".lower()
-    if re.search(r"\bloan\b|student|mortgage|auto loan|personal loan", text):
+    if re.search(r"\bloan\b|student|mortgage|heloc|home equity|installment|\bauto\b|vehicle|\blease\b", text):
         return "loan"
     if re.search(r"credit|card|visa|mastercard|amex|quicksilver|savor|venture|platinum|discover it", text):
         return "credit"
@@ -170,10 +175,12 @@ def store_sync(conn, accounts: list[dict]) -> dict:
     """Save accounts and transactions. Returns {"accounts": n, "new": n}."""
     now = now_iso()
     new = 0
+    seen, created = [], []
     for acc in accounts:
         acc_id = str(acc.get("id") or "")
         if not acc_id:
             continue
+        seen.append(acc_id)
         org = acc.get("org") or {}
         org_name = (org.get("name") or org.get("domain") or "") if isinstance(org, dict) else str(org)
         balance = _num(acc.get("balance"))
@@ -187,13 +194,14 @@ def store_sync(conn, accounts: list[dict]) -> dict:
                  _num(available, None) if available not in (None, "") else None,
                  _to_date(acc.get("balance-date")), now, acc_id))
         else:
+            created.append(acc_id)
             conn.execute(
-                "INSERT INTO fin_accounts (id, org, name, kind, currency, balance, available, balance_date, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO fin_accounts (id, org, name, kind, currency, balance, available, balance_date, updated_at, first_seen) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (acc_id, org_name, acc.get("name") or "", _guess_kind(org_name, acc.get("name") or "", balance),
                  acc.get("currency") or "USD", balance,
                  _num(available, None) if available not in (None, "") else None,
-                 _to_date(acc.get("balance-date")), now))
+                 _to_date(acc.get("balance-date")), now, now))
 
         # Remember each day's balance, for the Daily view's cash change.
         conn.execute("INSERT OR REPLACE INTO fin_balance_history (date, account_id, balance) VALUES (?, ?, ?)",
@@ -221,8 +229,71 @@ def store_sync(conn, accounts: list[dict]) -> dict:
                 (tx_id, acc_id, _to_date(posted_ts), amount, description, payee,
                  str(tx.get("memo") or "").strip(), pending, key, now))
             conn.execute("INSERT OR IGNORE INTO fin_merchants (key, name, updated_at) VALUES (?, '', ?)", (key, now))
+    merged = merge_replaced_accounts(conn, seen)
     match_transfers(conn)
-    return {"accounts": len(accounts), "new": new}
+    return {"accounts": len(accounts), "new": new, "created": created, "merged": merged}
+
+
+def _same_account_key(org: str, name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", f"{org}|{name}".lower()).strip()
+
+
+def merge_replaced_accounts(conn, seen_ids: list[str]) -> list[dict]:
+    """Fold old copies of reconnected accounts into their new copies.
+
+    When a bank is deleted and added again on SimpleFIN, its accounts come back
+    with new ids. The old copies would keep their last balance (counted twice
+    in net worth) and their transactions (counted twice in spending). An old
+    copy is one SimpleFIN stopped sending, with the same bank and name as an
+    account it does send that first appeared after the old one was last seen.
+    """
+    if not seen_ids:
+        return []
+    conn.execute("UPDATE fin_accounts SET first_seen = COALESCE((SELECT MIN(created_at) FROM fin_transactions t "
+                 "WHERE t.account_id = fin_accounts.id), updated_at) WHERE first_seen IS NULL")
+    seen = set(seen_ids)
+    rows = [dict(r) for r in conn.execute("SELECT * FROM fin_accounts")]
+    current, gone = {}, {}
+    for r in rows:
+        (current if r["id"] in seen else gone).setdefault(_same_account_key(r["org"], r["name"]), []).append(r)
+    merged = []
+    for key, olds in gone.items():
+        news = current.get(key, [])
+        if len(olds) != 1 or len(news) != 1:
+            continue  # nothing to match, or not sure which is which: leave it (the net worth check flags it)
+        old, new = olds[0], news[0]
+        if (old["updated_at"] or "") >= (new["first_seen"] or ""):
+            continue  # both were sent in the same sync, so they're two different accounts
+        _move_account(conn, old, new)
+        merged.append({"name": new["nickname"] or new["name"], "org": new["org"], "old_id": old["id"], "id": new["id"]})
+    return merged
+
+
+def _move_account(conn, old: dict, new: dict) -> None:
+    # Keep your own settings (nickname, type, hidden) from the old copy.
+    conn.execute("UPDATE fin_accounts SET nickname = CASE WHEN nickname = '' THEN ? ELSE nickname END, kind = ?, "
+                 "hidden = ?, flip = ? WHERE id = ?", (old["nickname"], old["kind"], old["hidden"], old.get("flip") or 0, new["id"]))
+    conn.execute("DELETE FROM fin_transactions WHERE account_id = ? AND pending = 1", (old["id"],))
+    for t in conn.execute("SELECT * FROM fin_transactions WHERE account_id = ?", (old["id"],)).fetchall():
+        dup = conn.execute("SELECT id, category, note FROM fin_transactions WHERE account_id = ? AND posted = ? "
+                           "AND ABS(amount - ?) < 0.005 AND description = ?",
+                           (new["id"], t["posted"], t["amount"], t["description"])).fetchone()
+        if dup:  # the new copy has it too: keep your category and note, drop the old one
+            conn.execute("UPDATE fin_transactions SET category = COALESCE(category, ?), "
+                         "note = CASE WHEN note = '' THEN ? ELSE note END WHERE id = ?", (t["category"], t["note"], dup["id"]))
+            conn.execute("UPDATE fin_transactions SET transfer_with = NULL WHERE transfer_with = ?", (t["id"],))
+            conn.execute("DELETE FROM fin_transactions WHERE id = ?", (t["id"],))
+        else:  # older history the new copy doesn't have: move it over
+            conn.execute("UPDATE fin_transactions SET account_id = ? WHERE id = ?", (new["id"], t["id"]))
+    conn.execute("INSERT OR IGNORE INTO fin_balance_history (date, account_id, balance) "
+                 "SELECT date, ?, balance FROM fin_balance_history WHERE account_id = ?", (new["id"], old["id"]))
+    conn.execute("DELETE FROM fin_balance_history WHERE account_id = ?", (old["id"],))
+    conn.execute("UPDATE fin_loans SET account_id = ? WHERE account_id = ?", (new["id"], old["id"]))
+    try:
+        conn.execute("UPDATE fin_savings_goals SET account_id = ? WHERE account_id = ?", (new["id"], old["id"]))
+    except Exception:  # noqa: BLE001 (savings goals not set up)
+        pass
+    conn.execute("DELETE FROM fin_accounts WHERE id = ?", (old["id"],))
 
 
 def match_transfers(conn) -> int:
@@ -290,6 +361,8 @@ def list_accounts(conn, include_hidden: bool = True) -> list[dict]:
     for r in rows:
         d = dict(r)
         d["display_name"] = d["nickname"] or d["name"]
+        if d.get("flip"):
+            d["balance"] = -d["balance"]
         if include_hidden or not d["hidden"]:
             out.append(d)
     return out
@@ -300,9 +373,9 @@ def update_account(conn, account_id: str, fields: dict) -> dict:
         raise ValidationError("That account doesn't exist.")
     if "kind" in fields and fields["kind"] not in KINDS:
         raise ValidationError("Unknown account type.")
-    for key in ("nickname", "kind", "hidden"):
+    for key in ("nickname", "kind", "hidden", "flip"):
         if key in fields and fields[key] is not None:
-            value = int(bool(fields[key])) if key == "hidden" else str(fields[key]).strip()
+            value = int(bool(fields[key])) if key in ("hidden", "flip") else str(fields[key]).strip()
             conn.execute(f"UPDATE fin_accounts SET {key} = ? WHERE id = ?", (value, account_id))
     return dict(conn.execute("SELECT * FROM fin_accounts WHERE id = ?", (account_id,)).fetchone())
 
@@ -317,6 +390,39 @@ def balances(conn) -> dict:
     loans = sum(l["balance"] for l in list_loans(conn))
     return {"cash": round(cash, 2), "debt": round(debt, 2), "loans": round(loans, 2),
             "net": round(cash - debt - loans, 2)}
+
+
+def net_worth_check(conn) -> list[dict]:
+    """Things that could make net worth wrong, each with the account to look at."""
+    accounts = list_accounts(conn, include_hidden=False)
+    issues = []
+    latest = max((a["balance_date"] or "" for a in accounts), default="")
+    groups = {}
+    for a in accounts:
+        groups.setdefault(_same_account_key(a["org"], a["name"]), []).append(a)
+    for same in groups.values():
+        if len(same) > 1:
+            total = sum(abs(a["balance"]) for a in same)
+            issues.append({"kind": "duplicate", "account_ids": [a["id"] for a in same],
+                           "text": f"{len(same)} accounts are named “{same[0]['display_name']}” at {same[0]['org'] or 'the same bank'} "
+                                   f"(${total:,.0f} together). If one is an old copy, hide it so it isn't counted twice."})
+    for a in accounts:
+        name = a["display_name"]
+        if latest and a["balance_date"] and (date.fromisoformat(latest) - date.fromisoformat(a["balance_date"])).days >= 5:
+            issues.append({"kind": "stale", "account_ids": [a["id"]],
+                           "text": f"{name} hasn't updated since {a['balance_date']} but still counts ${a['balance']:,.2f}. "
+                                   "If that bank needs attention, fix it on SimpleFIN; if the account is closed or an old copy, hide it."})
+        if a["kind"] == "credit" and a["balance"] > 1:
+            issues.append({"kind": "card_positive", "account_ids": [a["id"]],
+                           "text": f"Card {name} shows +${a['balance']:,.2f}, which counts as money you have. Cards are normally "
+                                   f"negative when you owe. If +${a['balance']:,.2f} is really what you owe, edit the account and turn on "
+                                   "“Balance shows what I owe as a positive number”."})
+        guess = _guess_kind(a["org"], a["name"], a["balance"])
+        if a["kind"] in ("checking", "savings", "other") and guess in ("credit", "loan"):
+            issues.append({"kind": "type", "account_ids": [a["id"]],
+                           "text": f"{name} is counted as cash (${a['balance']:,.2f}) but its name looks like a {'card' if guess == 'credit' else 'loan'}. "
+                                   "If it is, change its type so it's subtracted instead."})
+    return issues
 
 
 # ---------------------------------------------------------------------------
@@ -917,11 +1023,12 @@ def overview(conn) -> dict:
     return {
         "balances": balances(conn),
         "accounts": list_accounts(conn),
+        "checks": net_worth_check(conn),
         "month": month_summary(conn),
         "cashflow": cashflow(conn, 4),
         "recurring": recurring(conn),
         "uncategorized": conn.execute(
             f"SELECT COUNT(*) AS n FROM fin_transactions t LEFT JOIN fin_merchants m ON m.key = t.merchant_key "
-            f"JOIN fin_accounts a ON a.id = t.account_id WHERE {EFFECTIVE} = '{UNCATEGORIZED}'").fetchone()["n"],
+            f"JOIN fin_accounts a ON a.id = t.account_id WHERE a.hidden = 0 AND {EFFECTIVE} = '{UNCATEGORIZED}'").fetchone()["n"],
         "first_date": conn.execute("SELECT MIN(posted) AS d FROM fin_transactions").fetchone()["d"],
     }

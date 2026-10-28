@@ -30,6 +30,7 @@ class AccountPatch(BaseModel):
     nickname: str | None = None
     kind: str | None = None
     hidden: bool | None = None
+    flip: bool | None = None
 
 
 class BudgetIn(BaseModel):

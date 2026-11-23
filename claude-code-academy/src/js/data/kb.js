@@ -55,6 +55,10 @@ Python lessons: ${C.PY_LESSONS.map((l) => l.title).join(', ')}
 ## Connect & Automate chapters (MCP, Claude API, computer & browser use)
 These were checked against the anthropic Python SDK 2.x and MCP Python SDK 2.x (Nov 2026). Prefer them over older patterns you may remember (e.g. MCP SDK 2.x uses MCPServer, not FastMCP; Opus 5.5 computer use uses computer_toolset_20260801).
 ${(C.CONNECT || []).map((c) => `### ${c.title}\n${strip(c.body)}`).join('\n\n')}
+
+## GitHub & Claude chapters
+Claude-specific commands here were checked against code.claude.com docs and GitHub's MCP install guide (Nov 2026).
+${(C.GITHUB || []).map((c) => `### ${c.title}\n${strip(c.body)}`).join('\n\n')}
 Python certifications: ${C.PY_CERTS.map((c) => `${c.name} (${c.org})`).join('; ')}
 `;
   };

@@ -66,9 +66,9 @@ window.CCA = window.CCA || {};
       content: L('import json, sys', '', 'call = json.load(sys.stdin)            # the tool call Claude wants to make', 'path = call.get("tool_input", {}).get("file_path", "")', '', 'if path.endswith(".env"):', '    print("Blocked: .env contains secrets. Use .env.example.", file=sys.stderr)', '    sys.exit(2)                         # 2 = block the tool call', '', 'sys.exit(0)                             # 0 = allow'),
       notes: { 3: 'Hooks receive the pending tool call as JSON on standard input.', 6: 'Your own logic: any rule you can code, you can enforce.', 8: 'Exit code 2 BLOCKS the call, and the stderr message goes back to Claude so it can adjust.', 10: 'Exit code 0 lets the call proceed.' },
     },
-    '~/shop-app/.github/workflows/claude.yml': {
-      content: L('name: Claude PR review', 'on: [pull_request]', 'jobs:', '  review:', '    runs-on: ubuntu-latest', '    steps:', '      - uses: actions/checkout@v4', '      - uses: anthropics/claude-code-action@v1', '        with:', '          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}', '          prompt: |', '            Review this PR. Report only bugs, security issues', '            and missing tests. Skip style.'),
-      notes: { 2: 'Runs on every pull request.', 8: 'The official Claude Code GitHub Action.', 10: 'The API key comes from repository secrets, never hard-coded.', 12: 'Explicit criteria keep CI reviews focused and less noisy.' },
+    '~/shop-app/.github/workflows/claude-code-review.yml': {
+      content: L('name: Claude PR review', 'on:', '  pull_request:', '    types: [opened, synchronize, ready_for_review, reopened]', 'jobs:', '  review:', '    runs-on: ubuntu-latest', '    permissions:', '      contents: read', '      pull-requests: write', '      id-token: write', '    steps:', '      - uses: actions/checkout@v6', '        with:', '          fetch-depth: 1', '      - uses: anthropics/claude-code-action@v1', '        with:', '          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}', '          prompt: |', '            Review this PR and comment with findings. Report only bugs,', '            security issues and missing tests. Skip style.', '          claude_args: "--max-turns 8"'),
+      notes: { 2: 'Runs automatically when a PR is opened or updated (automation mode, because a prompt is given below).', 8: 'Least privilege: read the code, write only PR comments. id-token: write is needed for the Claude GitHub App authentication.', 16: 'The official Claude Code GitHub Action, version 1.', 18: 'The API key comes from repository secrets, never hard-coded. (Or claude_code_oauth_token with a subscription token from `claude setup-token`.)', 20: 'Explicit criteria keep CI reviews focused and less noisy.', 22: 'claude_args passes CLI flags; --max-turns caps cost and runaway runs.' },
     },
   };
 
@@ -362,13 +362,13 @@ window.CCA = window.CCA || {};
       id: 'headless', title: 'Headless & CI/CD', level: 'Advanced', mins: 6,
       sub: 'claude -p, JSON output, piping, and the GitHub Action.',
       intro: 'Claude Code can run **without** the interactive UI: in scripts and CI pipelines.',
-      start: { inClaude: false, cwd: '~/shop-app', files: ['~/shop-app/.github/workflows/claude.yml'] },
+      start: { inClaude: false, cwd: '~/shop-app', files: ['~/shop-app/.github/workflows/claude-code-review.yml'] },
       steps: [
         { do: 'Run a one-off prompt in print (headless) mode with JSON output', type: 'claude -p "summarize the last 3 commits" --output-format json', match: /^claude\s+(-p|--print)\s+.+/,
           explain: '`-p` runs once and exits, which is essential in CI (otherwise it waits for input forever). `--output-format json` gives a parseable result with cost and session id ([[headless]], [[output-format]]).', terms: ['headless', 'output-format'] },
         { do: 'Pipe a log file into Claude', type: 'cat error.log | claude -p "explain the root cause in one paragraph"', match: /^cat\s+error\.log\s*\|\s*claude\s+-p/,
           explain: 'Unix pipes (`|`) send one command\'s output into another. Here the log becomes Claude\'s input. Great for scripts and quick diagnostics.', terms: ['headless'] },
-        { do: 'Look at a ready-made CI workflow: open Files → .github → workflows → claude.yml', action: 'open:~/shop-app/.github/workflows/claude.yml', type: '(click 📁 Files → .github → workflows → claude.yml)',
+        { do: 'Look at a ready-made CI workflow: open Files → .github → workflows → claude-code-review.yml', action: 'open:~/shop-app/.github/workflows/claude-code-review.yml', type: '(click 📁 Files → .github → workflows → claude-code-review.yml)',
           explain: 'The official action `anthropics/claude-code-action@v1` runs Claude Code on PRs. Keep the API key in **secrets**, and use **explicit criteria** so reviews stay useful ([[github-actions]]).', terms: ['github-actions', 'explicit-criteria'] },
       ],
     },

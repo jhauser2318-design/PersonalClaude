@@ -41,6 +41,8 @@ window.CCA = window.CCA || {};
     theme: 'system',
     chats: [],           // saved tutor conversations
     connect: {},         // Connect & Automate chapterId -> true
+    github: {},          // GitHub & Claude chapterId -> true
+    gitplay: {},         // Git Playground challengeId -> true
     name: '',
   });
   let state;
@@ -82,7 +84,9 @@ window.CCA = window.CCA || {};
     const best = state.quiz.reduce((b, q) => Math.max(b, q.score / q.total), 0);
     const CN = (C.CONNECT || []).length || 1;
     const connect = Object.keys(state.connect || {}).filter((k) => (C.CONNECT || []).some((c) => c.id === k)).length / CN;
-    return Math.round((lessons * 0.3 + missions * 0.25 + best * 0.25 + py * 0.08 + connect * 0.12) * 100);
+    const GH = (C.GITHUB || []).length || 1;
+    const github = Object.keys(state.github || {}).filter((k) => (C.GITHUB || []).some((c) => c.id === k)).length / GH;
+    return Math.round((lessons * 0.27 + missions * 0.22 + best * 0.23 + py * 0.08 + connect * 0.1 + github * 0.1) * 100);
   };
 
   // ------------------------------------------------------------- highlight
@@ -319,10 +323,16 @@ window.CCA = window.CCA || {};
     page.className = 'view-root';
     host.appendChild(page);
     view.render(page, arg);
-    const navArg = route === 'connect' ? navGroupFor(arg) : null;
+    const navArg = route === 'connect' ? navGroupFor(arg) : route === 'github' ? ghNavFor(arg) : null;
     C.$$('.nav-item').forEach((n) => n.classList.toggle('active', n.dataset.route === route && (!n.dataset.arg || n.dataset.arg === navArg)));
   };
   window.addEventListener('hashchange', C.render);
+  function ghNavFor(arg) {
+    if (arg === 'play') return 'play';
+    if (arg === 'learn') return 'learn';
+    const ch = (C.GITHUB || []).find((c) => c.id === arg);
+    return ch && ch.group === 'Claude + GitHub' ? 'actions-claude' : 'why';
+  }
   // Which "Connect & Automate" sidebar entry a chapter belongs to
   function navGroupFor(arg) {
     if (arg === 'lab') return 'lab';

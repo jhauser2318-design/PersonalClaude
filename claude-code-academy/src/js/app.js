@@ -35,6 +35,7 @@
     C.LESSONS.forEach((m) => m.lessons.forEach((l) => out.push({ kind: 'Lesson', title: l.title, sub: m.title, text: l.title + ' ' + l.body, go: () => C.go('learn', l.id) })));
     C.MISSIONS.forEach((m) => out.push({ kind: 'Simulator', title: m.title, sub: m.sub, text: m.title + ' ' + m.sub + ' ' + m.steps.map((s) => s.do + ' ' + (s.type || '')).join(' '), go: () => C.go('simulator', m.id) }));
     C.QUESTIONS.forEach((q) => out.push({ kind: 'Question', title: q.q.slice(0, 90) + '…', sub: `${q.d} · ${q.s}`, text: q.q + ' ' + q.o.join(' '), go: () => C.go('practice', q.d) }));
+    (C.GITHUB || []).forEach((c) => out.push({ kind: 'GitHub', title: c.title, sub: c.group, text: c.title + ' ' + c.group + ' ' + c.body, go: () => C.go('github', c.id) }));
     (C.CONNECT || []).forEach((c) => out.push({ kind: 'Connect', title: c.title, sub: c.group, text: c.title + ' ' + c.group + ' ' + c.body, go: () => C.go('connect', c.id) }));
     C.PY_LESSONS.forEach((l) => out.push({ kind: 'Python', title: l.title, sub: 'Python Basics', text: l.title + ' ' + l.body, go: () => C.go('python', l.id) }));
     C.RESOURCES.forEach((g) => g.items.forEach(([n, u, d]) => out.push({ kind: 'Link', title: n, sub: d, text: n + ' ' + d + ' ' + u, go: () => (window.academy ? window.academy.openLink(u) : window.open(u, '_blank')) })));

@@ -69,7 +69,7 @@
       fs: freshFS(), cwd: '~', inClaude: false, mode: 'default', model: 'Opus',
       trusted: new Set(), history: [], hIdx: -1, busy: false, waiter: null, awaitPlan: false,
       allowCmds: new Set(), mission: null, step: 0, cards: [], prompts: [], interrupted: false,
-      wins: {}, z: 10, br: { url: '', values: {}, checked: false }, allowTools: new Set(), editorTabs: [], editorActive: null, fxDir: '~/shop-app', busyCtx: false, coachTab: 'mission', termKey: null,
+      wins: {}, z: 10, br: { url: '', values: {}, checked: false }, gh: {}, allowTools: new Set(), editorTabs: [], editorActive: null, fxDir: '~/shop-app', busyCtx: false, coachTab: 'mission', termKey: null,
     };
   }
 
@@ -627,6 +627,15 @@
       await sleep(250);
       print('[d]→ tool_result: OK[/]');
     },
+    async pause(ms) { await sleep(ms || 600); },
+    // Pretend GitHub pages in the Browser window
+    async ghpage(url, patch) { Object.assign(S.gh, patch || {}); S.br.url = url; openBrowser(url); await sleep(400); },
+    async ghupdate(patch) { Object.assign(S.gh, patch || {}); renderPage(); await sleep(300); },
+    async choice(question, options) {
+      permBox(esc(question), options.map(esc));
+      const c = await ask(options.length > 2 ? '1-3' : '1-2');
+      print(`[g]✔[/] ${esc(options[(+c || 1) - 1])}`);
+    },
     async 'cu-approved'(...args) {
       if (S.cuDenied) { print('[d](skipped: the human denied it, so Claude is told and stops here)[/]'); return; }
       return EVENTS.cu(...args);
@@ -678,6 +687,12 @@
     w.querySelector('.br-url').textContent = S.br.url;
     w.querySelector('.win-title').textContent = (SITE[S.br.url] || { title: 'Page' }).title;
     const v = S.br.values;
+    const custom = C.SIM_PAGES && C.SIM_PAGES[S.br.url];
+    if (custom) {
+      w.querySelector('.win-title').textContent = custom.title;
+      page.innerHTML = `<div class="gh">${custom.render(S.gh)}</div>`;
+      return;
+    }
     if (S.br.url.endsWith('/welcome')) {
       page.innerHTML = `<div class="site"><div class="site-nav">🛒 Shop App</div><div class="site-ok">🎉</div><h2>Welcome aboard!</h2><p>Account created for <b>${esc(v.e5 || '')}</b>.</p><p class="small muted">A confirmation email is on its way.</p></div>`;
       return;
@@ -816,6 +831,7 @@
       case 'npm': return npmCmd(args);
       case 'help': print('Simulated shell commands: [y]ls cd pwd cat clear git npm code echo claude[/]\nStart Claude Code with [y]claude[/]. Try [y]claude --help[/] too.'); return;
       case 'claude': return claudeCli(args, argStr);
+      case 'gh': return ghCli(args, argStr);
       default:
         print(`[r]${esc(cmd)}: command not found[/]`);
         if (/^(\/|init|help)/.test(cmd)) print('[d]Tip: slash commands work inside Claude Code. Type [y]claude[/] first.[/]');
@@ -836,6 +852,22 @@
     }
     if (args[0] === 'start') { print('Server listening on http://localhost:3000 [d](simulated; press Ctrl+C in real life)[/]'); return; }
     print(`[d]npm ${esc(args.join(' '))}: done[/]`);
+  }
+
+  // A small, read-mostly GitHub CLI for free play
+  async function ghCli(args) {
+    const [area, act, n] = args;
+    const out = (lines) => lines.forEach((l) => print(l));
+    if (area === 'auth' && act === 'status') return out(['github.com', '  [g]✓[/] Logged in to github.com account [B]you[/] (keyring)', '  - Git operations protocol: https', '  - Token scopes: repo, read:org, workflow']);
+    if (area === 'repo' && act === 'view') return out(['[B]you/shop-app[/]  [d]Private[/]', 'A tiny online store API used for practice.', '[d]Default branch: main · 3 open issues · 1 open PR[/]']);
+    if (area === 'issue' && act === 'list') return out(['#42  Negative totals with big discount codes  [r]bug[/]', '#38  Cart crashes when items is missing        [r]bug[/]', '#35  Add product search                       [b]enhancement[/]']);
+    if (area === 'issue' && act === 'view') return out([`[B]Issue #${n || 38}[/]  Open · sam`, 'See the issue thread on github.com (simulated).']);
+    if (area === 'pr' && (act === 'list' || act === 'status')) return out(['#43  fix: cap discounts at 0-100%  fix/discount-cap  [y]checks running[/]']);
+    if (area === 'pr' && act === 'checks') return out(['[g]✓[/] Tests / test (pull_request)', '[g]✓[/] Claude PR review']);
+    if (area === 'run' && act === 'list') return out(['[r]X[/]  Add product search  Tests  feature/search  9182', '[g]✓[/]  Cap discounts       Tests  main            9179']);
+    if (area === 'pr' && act === 'create') return out(['[d]Push your branch first, then gh pr create opens a PR (try the "GitHub flow with Claude" mission).[/]']);
+    explainCard('GitHub CLI (gh)', 'In this simulator `gh` knows: auth status, repo view, issue list/view, pr list/status/checks, run list. The GitHub missions show the full flow.', ['gh-cli']);
+    return out([`[d]gh ${esc(args.join(' '))}: simulated. Try gh issue list, gh pr list or gh run list.[/]`]);
   }
 
   async function claudeCli(args, argStr) {
@@ -1273,11 +1305,15 @@
     }
     openTerminal();
     if (S.busy || S.waiter) { C.toast(S.waiter ? 'Claude is waiting for your answer in the terminal (type 1)' : 'Wait for Claude to finish'); return; }
+    if (S.typing) return; // ignore extra clicks while "Show me" is already typing
     const inp = T.inWrap.querySelector('.term-input'); if (!inp) return;
-    inp.value = ''; inp.focus();
-    for (const ch of st.type) { inp.value += ch; await sleep(st.type.length > 40 ? 12 : 35); }
-    await sleep(250);
-    const v = inp.value; inp.value = '';
+    S.typing = true;
+    try {
+      inp.value = ''; inp.focus();
+      for (const ch of st.type) { inp.value += ch; await sleep(st.type.length > 40 ? 12 : 35); }
+      await sleep(250);
+    } finally { S.typing = false; }
+    const v = st.type; inp.value = '';
     submit(v);
   }
 

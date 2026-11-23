@@ -64,7 +64,7 @@ function timeline(plan, day) {
   const blocks = plan.blocks.map((b) => ({ kind: "block", ...b, s: toMin(b.start), e: toMin(b.end) }));
   const events = eventItems(plan.events, day);
   const all = [...blocks, ...events];
-  let first = 6, last = 23;
+  let first = 5, last = 23;
   for (const it of all) { first = Math.min(first, Math.floor(it.s / 60)); last = Math.max(last, Math.ceil(it.e / 60)); }
   last = Math.min(24, Math.max(last, first + 1));
   const top = (min) => ((min - first * 60) / 60) * HOUR_PX;

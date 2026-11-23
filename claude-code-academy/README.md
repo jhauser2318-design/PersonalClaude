@@ -10,18 +10,19 @@ A desktop study app for **Claude Code** and the **Claude Certified Architect –
 |---|---|
 | **Home** | Ready-meter, XP & levels, study streak, your weakest exam domain, quick links |
 | **My Study Plan** | 5-week checklist and exam-date countdown |
-| **Simulator** | A **mock desktop** (Terminal, Files, Code editor, Quick Reference, taskbar & start menu) running a scripted Claude Code session. 11 guided missions, from first launch through CLAUDE.md, fixing a bug, plan mode, permissions, commands & skills, subagents, hooks, MCP, context management, and headless/CI. Every highlighted word is explained, a **Coach** panel says what to do and what just happened, and config files open with **line-by-line annotations**. Free-play mode understands ~40 real commands. |
+| **Simulator** | A **mock desktop** (Terminal, Files, Code editor, **Browser**, Quick Reference, taskbar & start menu) running a scripted Claude Code session. 14 guided missions, from first launch through CLAUDE.md, fixing a bug, plan mode, permissions, commands & skills, subagents, hooks, MCP, context management and headless/CI, plus **Browser clicks with Playwright MCP** (watch Claude click by element ref, then turn it into a test), **Computer use** (an animated cursor moves and clicks from screenshots, with a human-approval step) and **Build your own MCP server**. Every highlighted word is explained, a **Coach** panel says what to do and what just happened, and config files open with **line-by-line annotations**. Free-play mode understands ~40 real commands. |
 | **Lessons** | 22 lessons from "what is a terminal?" to multi-agent design, each with quick checks and a link to the matching simulator mission |
-| **Cheat Sheet** | Commands, keys, MCP and every config file, click to copy |
+| **Connect & Automate** | The MCP & API hub: 12 chapters on how Claude's actions reach real tasks. MCP explained (hosts, transports, tools/resources/prompts), every `claude mcp` command, **building your own MCP server in Python** (tested against MCP SDK 2.x), Claude Desktop config, the **Claude API** from zero, tool use and the agent loop, the MCP connector and Agent SDK, **computer use** (all 17 actions + a complete Python loop), **browser automation** five ways (Playwright MCP, Claude in Chrome, the API browser toolset, Playwright scripts, computer use), desktop recipes, and a safety checklist. Includes an **Agent Loop Visualizer** that steps through the exact JSON, and a "which approach should I use?" picker |
+| **Cheat Sheet** | Commands, keys, MCP, browser & computer automation and every config file, click to copy |
 | **Glossary** | 80 terms in plain English, tagged with the exam domain they belong to; hover any highlighted term anywhere in the app |
 | **Exam Guide** | Format, the 5 domains & weights, task statements, the 6 scenarios, decision principles, exam-day tactics, sources |
-| **Practice Tests** | 49 original scenario questions with explanations; quick 10, domain drills, timed mock exam, mistakes review, history. Answer order is shuffled every time |
+| **Practice Tests** | 59 original scenario questions with explanations; quick 10, domain drills, timed mock exam, mistakes review, history. Answer order is shuffled every time |
 | **Flashcards** | Spaced repetition over the whole glossary, by domain or category |
 | **Ask Claude** | An AI tutor that knows the app's content. Uses Claude through your API key (streaming, with prompt caching); works **offline** from the built-in knowledge base without a key |
 | **Python Basics** | 11 lessons with a **live playground** that runs code on your own Python |
 | **Python Certifications** | PCEP → PCAP → PCPP1, CS50P, freeCodeCamp, Google IT Automation, and links |
 | **What's Next** | Models, Claude Code features, API platform, learning & certs, your 4-month roadmap |
-| **Resources** | ~60 curated links: official docs, Claude Academy courses, engineering must-reads, exam guides, SDKs |
+| **Resources** | ~75 curated links: official docs, MCP & automation tools, Claude Academy courses, engineering must-reads, exam guides, SDKs |
 | **Settings** | API key (encrypted), tutor model & effort, Python path, light/dark theme, export/import/reset progress |
 
 Global search (**Ctrl+K**) finds lessons, terms, questions, commands, missions and links. Press Enter on no match to ask the tutor.
@@ -72,6 +73,8 @@ claude-code-academy/
 Content lives in plain JavaScript data files, so adding a lesson, term, question or mission is just editing `src/js/data/*.js`. Run `npm run check` afterwards. `npm start -- --dev` opens DevTools.
 
 ## Accuracy note
+
+The Connect & Automate code was checked in November 2026 against the real packages: the MCP server example was run with `mcp` 2.3.0 and tested with an MCP client, and the computer-use loop was run with `anthropic` 2.12.0 against a mock API. Note that `pip install "mcp[cli]"` now gives MCP SDK 2.x, where `FastMCP` is renamed `MCPServer`, so older tutorials break.
 
 Exam facts (60 questions, 120 minutes, 720/1000 to pass, domain weights) come from published study guides, not an official Anthropic exam guide. Claude Code and the API change quickly. The app links to the official docs everywhere, and you should confirm exam logistics on Anthropic's certification page before booking. Practice questions are original, written in the style of the exam; they are not real exam items.
 

@@ -69,7 +69,7 @@
       fs: freshFS(), cwd: '~', inClaude: false, mode: 'default', model: 'Opus',
       trusted: new Set(), history: [], hIdx: -1, busy: false, waiter: null, awaitPlan: false,
       allowCmds: new Set(), mission: null, step: 0, cards: [], prompts: [], interrupted: false,
-      wins: {}, z: 10, editorTabs: [], editorActive: null, fxDir: '~/shop-app', busyCtx: false, coachTab: 'mission', termKey: null,
+      wins: {}, z: 10, br: { url: '', values: {}, checked: false }, allowTools: new Set(), editorTabs: [], editorActive: null, fxDir: '~/shop-app', busyCtx: false, coachTab: 'mission', termKey: null,
     };
   }
 
@@ -85,16 +85,20 @@
             ${icon('files', '<span class="di-img di-files">📁</span>', 'Files')}
             ${icon('editor', '<span class="di-img di-editor">{ }</span>', 'Code')}
             ${icon('docs', `<span class="di-img di-docs">${C.logo()}</span>`, 'Quick Ref')}
+            ${icon('browser', '<span class="di-img di-browser">🌐</span>', 'Browser')}
             ${icon('missions', '<span class="di-img di-guide">🎯</span>', 'Missions')}
           </div>
           <div id="deskTip" class="desk-tip hidden"></div>
           <div id="winLayer"></div>
+          <div id="simCursor" class="sim-cursor hidden"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M3 2l7.5 19 2.6-7.9L21 10.5z" fill="#fff" stroke="#1F1E1D" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
+          <div id="deskFlash" class="desk-flash"></div>
           <div id="startMenu" class="start-menu hidden"></div>
           <div class="taskbar">
             <div class="tb-start" id="tbStart" data-tip="Start menu">${C.logo()}</div>
             <div class="tb-app" data-open="terminal"><span style="font:700 12px var(--mono);color:#E8916E">&gt;_</span> Terminal</div>
             <div class="tb-app" data-open="files">📁 Files</div>
             <div class="tb-app" data-open="editor"><span style="color:#8EC5F0;font-weight:700">{ }</span> Code</div>
+            <div class="tb-app" data-open="browser">🌐 Browser</div>
             <div class="tb-app" data-open="docs">${C.logo('tiny')} Quick Ref</div>
             <div class="tb-clock" id="tbClock"></div>
           </div>
@@ -137,6 +141,7 @@
     else if (id === 'files') openFiles();
     else if (id === 'editor') openEditor();
     else if (id === 'docs') openDocs();
+    else if (id === 'browser') openBrowser();
     else if (id === 'missions') { S.coachTab = 'missions'; renderCoach(); }
   }
   function toggleStart() {
@@ -146,6 +151,7 @@
       <div class="sm-item" data-sm="terminal">&gt;_ Terminal</div>
       <div class="sm-item" data-sm="files">📁 Files</div>
       <div class="sm-item" data-sm="editor">{ } Code editor</div>
+      <div class="sm-item" data-sm="browser">🌐 Browser</div>
       <div class="sm-item" data-sm="docs">${C.logo('tiny')} Quick Reference</div>
       <div class="sm-item" data-sm="missions">🎯 Missions</div>
       <div class="sm-item" data-sm="free">🧪 Free play (no mission)</div>
@@ -560,14 +566,192 @@
       await sleep(350);
       const [, server, t] = tool.split('__');
       line(`<span class="t-orange">⏺</span> <span class="t-bold">${esc(server)} - ${esc(t)}</span> <span class="t-dim">(MCP)</span>(${esc(args)})`);
-      if (S.mode !== 'accept') {
+      if (S.mode !== 'accept' && !S.allowTools.has(tool)) {
         permBox(`Allow tool <span class="t-yellow">${esc(tool)}</span>?`, ['Yes', `Yes, and don't ask again for ${esc(tool)}`, 'No (esc)']);
         const c = await ask('1-3');
+        if (c === '2') S.allowTools.add(tool);
         if (c === '3' || c === 'esc') { result('[r]Rejected.[/]'); return false; }
       }
       res.forEach((l, i) => (i === 0 ? result(l) : print('     ' + l)));
     },
   };
+
+  // ------------------------------------------- browser + computer-use events
+  const PW = { navigate: 'browser_navigate', snapshot: 'browser_snapshot', type: 'browser_type', click: 'browser_click', screenshot: 'browser_take_screenshot', fill: 'browser_fill_form' };
+  Object.assign(EVENTS, {
+    async setflag(name) { S[name] = true; },
+    // Playwright MCP: Claude targets elements by the ref ids in an accessibility snapshot
+    async browser(action, arg, extra) {
+      await sleep(300);
+      const tool = 'mcp__playwright__' + PW[action];
+      const label = arg && REF_LABEL[arg];
+      const argText = action === 'navigate' ? `url: "${arg}"` : action === 'type' ? `element: "${label}", target: "${arg}", text: "${extra}"` : action === 'click' ? `element: "${label}", target: "${arg}"` : '';
+      line(`<span class="t-orange">⏺</span> <span class="t-bold" data-tip="An MCP tool from the Playwright server. It controls a real browser." style="cursor:help">playwright - ${PW[action]}</span> <span class="t-dim">(MCP)</span>(${esc(argText)})`);
+      if (S.mode !== 'accept' && !S.allowTools.has('playwright')) {
+        permBox(`Allow tool <span class="t-yellow">${esc(tool)}</span>?`, ['Yes', 'Yes, and don\'t ask again for <span class="t-yellow">playwright</span> tools', 'No (esc)']);
+        pushCard('🔐 MCP tool approval', 'MCP tools ask for permission like built-in tools. Option **2** trusts every tool from this server for the session; you can also pre-approve them with an allow rule like `mcp__playwright`.', ['mcp', 'permission-rules']);
+        const c = await ask('1-3');
+        if (c === '2') S.allowTools.add('playwright');
+        if (c === '3' || c === 'esc') { result('[r]Rejected.[/]'); return false; }
+      }
+      if (action === 'navigate') { openBrowser(arg, true); await sleep(500); result(`[d]Navigated to ${arg} · page title: "${SITE[S.br.url].title}"[/]`); }
+      if (action === 'snapshot') {
+        await sleep(300);
+        result('[d]Page snapshot (accessibility tree):[/]');
+        snapshotLines().forEach((l) => print('     ' + l));
+      }
+      if (action === 'type') { await browserAct(arg, 'type', extra); result(`[d]Typed into "${label}"[/]`); }
+      if (action === 'click') { await browserAct(arg, 'click'); result(`[d]Clicked "${label}"[/]`); }
+      if (action === 'screenshot') { await flash(S.wins.browser); result('[d]Saved screenshot page-signup.png (also shown to Claude)[/]'); }
+    },
+    // Computer use: Claude sees screenshots and answers with pixel coordinates
+    async cu(action, selector, extra) {
+      const el = selector ? C.$(selector) : null;
+      const input = {};
+      if (el && /click|move/.test(action)) input.coordinate = screenCoord(el);
+      if (action === 'type' || action === 'key') input.text = extra;
+      if (action === 'scroll') Object.assign(input, { coordinate: el ? screenCoord(el) : [640, 400], scroll_direction: 'down', scroll_amount: extra || 3 });
+      if (action === 'zoom' && el) { const r = screenRect(el); input.region = r; }
+      print(`[d]← tool_use[/]  {"name": "[o]${action}[/]", "toolset_name": "computer", "input": ${JSON.stringify(input)}}`);
+      if (action === 'screenshot') { await flash(C.$('#desk')); print('[d]→ tool_result: [image 1280×800 PNG][/]'); return; }
+      if (action === 'zoom' && el) { await zoomBox(el); print('[d]→ tool_result: [zoomed image of that region][/]'); return; }
+      if (el) await moveCursor(el);
+      if (/click/.test(action) && el) {
+        await clickFx();
+        if (el.closest('.br-page')) await browserAct(el.dataset.ref, 'click', null, true);
+        else if (action === 'double_click') el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        else el.click();
+      }
+      if (action === 'type' && el && el.closest('.br-page')) await browserAct(el.dataset.ref, 'type', extra, true);
+      if (action === 'scroll' && el) { el.scrollBy({ top: 160, behavior: 'smooth' }); }
+      await sleep(250);
+      print('[d]→ tool_result: OK[/]');
+    },
+    async 'cu-approved'(...args) {
+      if (S.cuDenied) { print('[d](skipped: the human denied it, so Claude is told and stops here)[/]'); return; }
+      return EVENTS.cu(...args);
+    },
+    // A Playwright test replaying the signup flow without Claude
+    async replay() {
+      S.br = { url: 'http://localhost:3000/signup', values: {}, checked: false };
+      openBrowser(S.br.url, true);
+      await sleep(400);
+      await browserAct('e5', 'type', 'ana+shop@mail.com');
+      await browserAct('e7', 'type', 'Test1234!');
+      await browserAct('e9', 'click');
+      await browserAct('e11', 'click');
+      await sleep(300);
+    },
+    async calc() {
+      const desk = C.$('#desk').getBoundingClientRect();
+      const { body } = openWin('calc', { title: 'Calculator', icon: '🧮', w: 240, h: 300, x: desk.width / 2 - 120, y: 80 });
+      body.innerHTML = `<div class="calc"><div class="calc-d">0</div><div class="calc-k">${'789÷456×123−0.=+'.split('').map((k) => `<span>${k}</span>`).join('')}</div></div>`;
+      await sleep(300);
+    },
+    async 'cu-confirm'(question) {
+      line(`<div class="cc-perm"><div class="t-bold">⚠ agent.py: Claude wants to ${esc(question)}</div><div class="t-dim">Your harness pauses here: consequential actions need a human.</div><div class="opt" data-choice="1">❯ 1. Allow</div><div class="opt" data-choice="2">  2. Deny</div></div>`);
+      pushCard('🙋 Human in the loop', 'Good computer-use apps **pause before consequential actions** (submitting forms, payments, deleting, accepting terms) and ask a person. Type **1** to allow or **2** to deny.', ['escalation']);
+      const c = await ask('1-2');
+      print(c === '1' ? '[g]✔ Approved by human[/]' : '[r]✖ Denied: Claude is told the action was not allowed[/]');
+      S.cuDenied = c !== '1';
+    },
+  });
+
+  // ---------------------------------------------------------- browser app
+  const REF_LABEL = { e2: 'Create your account heading', e5: 'Email textbox', e7: 'Password textbox', e9: 'I agree to the terms checkbox', e11: 'Create account button' };
+  const SITE = {
+    'http://localhost:3000/signup': { title: 'Shop App – Sign up' },
+    'http://localhost:3000/welcome': { title: 'Shop App – Welcome' },
+  };
+  function openBrowser(url, automated) {
+    const desk = C.$('#desk').getBoundingClientRect();
+    const { body, existed } = openWin('browser', { title: 'Browser', icon: '🌐', w: 600, h: 470, x: desk.width - 650, y: 26 });
+    if (!existed || !body.querySelector('.br')) body.innerHTML = '<div class="br"><div class="br-bar"><span class="br-nav">◀ ▶ ⟳</span><div class="br-url"></div><span class="br-badge hidden">🤖 Automated</span></div><div class="br-page"></div></div>';
+    if (url) S.br.url = url;
+    if (!S.br.url) S.br.url = 'http://localhost:3000/signup';
+    if (automated) body.querySelector('.br-badge').classList.remove('hidden');
+    renderPage();
+  }
+  function renderPage() {
+    const w = S.wins.browser; if (!w) return;
+    const page = w.querySelector('.br-page');
+    w.querySelector('.br-url').textContent = S.br.url;
+    w.querySelector('.win-title').textContent = (SITE[S.br.url] || { title: 'Page' }).title;
+    const v = S.br.values;
+    if (S.br.url.endsWith('/welcome')) {
+      page.innerHTML = `<div class="site"><div class="site-nav">🛒 Shop App</div><div class="site-ok">🎉</div><h2>Welcome aboard!</h2><p>Account created for <b>${esc(v.e5 || '')}</b>.</p><p class="small muted">A confirmation email is on its way.</p></div>`;
+      return;
+    }
+    page.innerHTML = `<div class="site"><div class="site-nav">🛒 Shop App <span>Products · Cart</span></div>
+      <h2 data-ref="e2">Create your account</h2>
+      <label>Email</label><div class="site-input" data-ref="e5">${esc(v.e5 || '')}</div>
+      <label>Password</label><div class="site-input" data-ref="e7">${v.e7 ? '•'.repeat(v.e7.length) : ''}</div>
+      <div class="site-chk" data-ref="e9"><span class="cb ${S.br.checked ? 'on' : ''}">${S.br.checked ? '✓' : ''}</span> I agree to the terms</div>
+      <div class="site-btn" data-ref="e11">Create account</div>
+      ${S.br.error ? `<div class="site-err">${esc(S.br.error)}</div>` : ''}</div>`;
+  }
+  function snapshotLines() {
+    if (S.br.url.endsWith('/welcome')) return ['- heading "Welcome aboard!" [level=2] [ref=e3]', '- paragraph: Account created for ' + (S.br.values.e5 || '')];
+    return ['- Page URL: ' + S.br.url, '- Page Title: ' + SITE[S.br.url].title, '- Page Snapshot:', '  - heading "Create your account" [level=2] [ref=e2]',
+      `  - textbox "Email" [ref=e5]${S.br.values.e5 ? ': ' + S.br.values.e5 : ''}`, '  - textbox "Password" [ref=e7]', `  - checkbox "I agree to the terms" [${S.br.checked ? 'checked' : 'unchecked'}] [ref=e9]`, '  - button "Create account" [ref=e11]',
+      ...(S.br.error ? [`  - alert: ${S.br.error}`] : [])];
+  }
+  async function browserAct(ref, action, text, cursorDone) {
+    const w = S.wins.browser; if (!w) return;
+    const el = w.querySelector(`[data-ref="${ref}"]`); if (!el) return;
+    if (!cursorDone) { await moveCursor(el); if (action === 'click') await clickFx(); }
+    el.classList.add('site-focus');
+    if (action === 'type') {
+      S.br.values[ref] = '';
+      for (const ch of text) { S.br.values[ref] += ch; renderPage(); w.querySelector(`[data-ref="${ref}"]`).classList.add('site-focus'); await sleep(40); }
+    }
+    if (action === 'click') {
+      if (ref === 'e9') S.br.checked = !S.br.checked;
+      if (ref === 'e11') {
+        if (!S.br.checked) S.br.error = 'Please accept the terms first.';
+        else { S.br.error = ''; renderPage(); await sleep(300); S.br.url = 'http://localhost:3000/welcome'; }
+      }
+      renderPage();
+    }
+    await sleep(200);
+  }
+
+  // ------------------------------------------------- cursor, flash, coords
+  function deskXY(el) {
+    const d = C.$('#desk').getBoundingClientRect(), r = el.getBoundingClientRect();
+    return { x: r.left - d.left + r.width / 2, y: r.top - d.top + r.height / 2, dw: d.width, dh: d.height };
+  }
+  function screenCoord(el) { const p = deskXY(el); return [Math.round(p.x / p.dw * 1280), Math.round(p.y / p.dh * 800)]; }
+  function screenRect(el) {
+    const d = C.$('#desk').getBoundingClientRect(), r = el.getBoundingClientRect();
+    const sx = 1280 / d.width, sy = 800 / d.height;
+    return [Math.round((r.left - d.left) * sx), Math.round((r.top - d.top) * sy), Math.round((r.right - d.left) * sx), Math.round((r.bottom - d.top) * sy)];
+  }
+  async function moveCursor(el) {
+    const cur = C.$('#simCursor'); if (!cur || !el) return;
+    el.scrollIntoView({ block: 'nearest' });
+    const p = deskXY(el);
+    if (cur.classList.contains('hidden')) { cur.style.transition = 'none'; cur.style.transform = `translate(${p.dw / 2}px, ${p.dh - 80}px)`; cur.classList.remove('hidden'); await sleep(30); }
+    cur.style.transition = 'transform .65s cubic-bezier(.3,.8,.3,1)';
+    cur.style.transform = `translate(${p.x - 4}px, ${p.y - 3}px)`;
+    await sleep(700);
+  }
+  async function clickFx() {
+    const cur = C.$('#simCursor'); if (!cur) return;
+    cur.classList.add('clicking'); await sleep(220); cur.classList.remove('clicking');
+  }
+  async function flash(target) {
+    const f = C.$('#deskFlash'); if (!f) return;
+    const d = C.$('#desk').getBoundingClientRect(), r = (target || C.$('#desk')).getBoundingClientRect();
+    Object.assign(f.style, { left: r.left - d.left + 'px', top: r.top - d.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+    f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+    await sleep(500);
+  }
+  async function zoomBox(el) {
+    const f = C.$('#deskFlash'); const d = C.$('#desk').getBoundingClientRect(), r = el.getBoundingClientRect();
+    Object.assign(f.style, { left: r.left - d.left - 4 + 'px', top: r.top - d.top - 4 + 'px', width: r.width + 8 + 'px', height: r.height + 8 + 'px' });
+    f.classList.remove('go'); f.classList.add('zoom'); await sleep(900); f.classList.remove('zoom');
+  }
 
   // ----------------------------------------------------- default handlers
   async function handleDefault(v, matchedStep) {
@@ -991,12 +1175,12 @@
   }
   function jsHi(l) {
     let s = esc(l);
-    const stash = []; const keep = (h) => { stash.push(h); return `\u0000${stash.length - 1}\u0000`; };
+    const stash = []; const keep = (h) => { stash.push(h); return `${String.fromCharCode(0xE100 + stash.length - 1)}`; };
     s = s.replace(/(\/\/.*$)/, (m) => keep(`<span class="tk-c">${m}</span>`));
     s = s.replace(/('[^']*'|`[^`]*`)/g, (m) => keep(`<span class="tk-s">${m}</span>`));
     s = s.replace(/\b(const|let|function|return|if|require|module|exports|new|async|await|test)\b/g, '<span class="tk-k">$1</span>');
     s = s.replace(/\b(\d+)\b/g, '<span class="tk-n">$1</span>');
-    return s.replace(/\u0000(\d+)\u0000/g, (m, i) => stash[+i]);
+    return s.replace(/([-])/g, (m, c) => stash[c.charCodeAt(0) - 0xE100]);
   }
 
   // ------------------------------------------------------------- docs app
@@ -1024,6 +1208,8 @@
     Object.assign(S, newState(), keep);
     S.mission = m; S.step = 0; S.coachTab = 'mission';
     S.fs = freshFS(m.start.files);
+    if (m.start.flags) m.start.flags.forEach((f) => { S[f] = true; });
+    if (m.start.fxDir) S.fxDir = m.start.fxDir;
     S.cwd = m.start.cwd || '~';
     if (m.start.inClaude) { S.inClaude = true; S.trusted.add(S.cwd); }
     openTerminal();

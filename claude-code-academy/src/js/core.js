@@ -40,6 +40,7 @@ window.CCA = window.CCA || {};
     examDate: '',
     theme: 'system',
     chats: [],           // saved tutor conversations
+    connect: {},         // Connect & Automate chapterId -> true
     name: '',
   });
   let state;
@@ -79,7 +80,9 @@ window.CCA = window.CCA || {};
     const missions = Object.keys(state.missions).length / M;
     const py = Object.keys(state.python).length / P;
     const best = state.quiz.reduce((b, q) => Math.max(b, q.score / q.total), 0);
-    return Math.round((lessons * 0.35 + missions * 0.3 + best * 0.25 + py * 0.1) * 100);
+    const CN = (C.CONNECT || []).length || 1;
+    const connect = Object.keys(state.connect || {}).filter((k) => (C.CONNECT || []).some((c) => c.id === k)).length / CN;
+    return Math.round((lessons * 0.3 + missions * 0.25 + best * 0.25 + py * 0.08 + connect * 0.12) * 100);
   };
 
   // ------------------------------------------------------------- highlight
@@ -89,7 +92,9 @@ window.CCA = window.CCA || {};
   C.highlight = (code, lang) => {
     let s = C.esc(code);
     const stash = [];
-    const keep = (html) => { stash.push(html); return `\u0000${stash.length - 1}\u0000`; };
+    // Placeholders use private-use characters (no digits or word chars), so later
+    // regexes such as the number highlighter can never match inside them.
+    const keep = (html) => { stash.push(html); return `${String.fromCharCode(0xE100 + stash.length - 1)}`; };
     lang = (lang || '').toLowerCase();
     if (lang === 'python' || lang === 'py') {
       s = s.replace(/(#[^\n]*)/g, (m) => keep(`<span class="tk-c">${m}</span>`));
@@ -113,7 +118,7 @@ window.CCA = window.CCA || {};
       s = s.replace(/(^|\n)(---)/g, (m, a, b) => a + keep(`<span class="tk-c">${b}</span>`));
       s = s.replace(/(\$ARGUMENTS|\$\d|@[\w./-]+)/g, (m) => keep(`<span class="tk-b">${m}</span>`));
     }
-    return s.replace(/\u0000(\d+)\u0000/g, (m, i) => stash[+i]);
+    return s.replace(/([-])/g, (m, c) => stash[c.charCodeAt(0) - 0xE100]);
   };
 
   // --------------------------------------------------------------- markdown
@@ -165,7 +170,7 @@ window.CCA = window.CCA || {};
       if (h) { flush(); const n = h[1].length + 1; out += `<h${n}>${inline(h[2])}</h${n}>`; i++; continue; }
       if (/^\s*[-*] /.test(line)) {
         flush(); out += '<ul>';
-        while (i < lines.length && /^\s*[-*] /.test(lines[i])) { out += `<li>${inline(lines[i].replace(/^\s*[-*] /, ''))}</li>`; i++; }
+        while (i < lines.length && /^\s*[-*] /.test(lines[i])) { out += `<li>${inline(lines[i].replace(/^\s*[-*] /, '').replace(/^\[ \] /, '☐ '))}</li>`; i++; }
         out += '</ul>'; continue;
       }
       if (/^\s*\d+\. /.test(line)) {
@@ -314,9 +319,19 @@ window.CCA = window.CCA || {};
     page.className = 'view-root';
     host.appendChild(page);
     view.render(page, arg);
-    C.$$('.nav-item').forEach((n) => n.classList.toggle('active', n.dataset.route === route));
+    const navArg = route === 'connect' ? navGroupFor(arg) : null;
+    C.$$('.nav-item').forEach((n) => n.classList.toggle('active', n.dataset.route === route && (!n.dataset.arg || n.dataset.arg === navArg)));
   };
   window.addEventListener('hashchange', C.render);
+  // Which "Connect & Automate" sidebar entry a chapter belongs to
+  function navGroupFor(arg) {
+    if (arg === 'lab') return 'lab';
+    const ch = (C.CONNECT || []).find((c) => c.id === arg) || (C.CONNECT || [])[0];
+    if (!ch) return 'mcp';
+    if (ch.group === 'Claude API') return 'api';
+    if (ch.group === 'Act on your computer' || ch.group === 'Recipes & safety') return 'computer';
+    return 'mcp';
+  }
 
   C.pageHead = (title, sub, actions) => `
     <div class="page-head">${C.logo('lg')}<div><h1>${title}</h1>${sub ? `<p>${sub}</p>` : ''}</div>${actions ? `<div class="actions">${actions}</div>` : ''}</div>`;

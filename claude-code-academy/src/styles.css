@@ -701,3 +701,37 @@ table.t th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; 
 .gh-label { background: #f8d7da; color: #a40e26; border-radius: 99px; padding: 0 7px; font-size: 11px; font-weight: 600; }
 .gh-log { background: #1F2328; color: #e6edf3; border-radius: 8px; padding: 10px 12px; font: 12px/1.5 var(--mono); white-space: pre-wrap; margin-top: 10px; }
 .gh-spin { display: inline-block; color: #D97757; animation: spin 1.4s linear infinite; }
+
+/* ---------- Simulator: Claude desktop app (Cowork) ---------- */
+.di-claude { background: #FFFDF8; }
+.di-claude .logo { width: 30px; height: 30px; }
+.cw { display: flex; flex-direction: column; height: 100%; background: var(--bg); }
+.cw-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.cw-tabs { margin-left: auto; display: flex; background: var(--surface-3); border-radius: 8px; padding: 2px; }
+.cw-tabs span { padding: 3px 10px; border-radius: 6px; font-size: 12px; color: var(--muted); }
+.cw-tabs span.on { background: var(--surface); color: var(--orange-deep); font-weight: 650; }
+.cw-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); font-size: 12px; background: var(--surface-2); }
+.cw-mode { margin-left: auto; cursor: help; }
+.cw-btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 4px 10px; font: 600 12px var(--sans); cursor: pointer; }
+.cw-btn.yes { background: var(--orange); border-color: var(--orange-deep); color: #fff; }
+.cw-msgs { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.cw-m { display: flex; gap: 8px; align-items: flex-start; max-width: 92%; }
+.cw-m.you { align-self: flex-end; background: var(--surface-3); border-radius: 12px; padding: 7px 11px; }
+.cw-m.claude > div { padding-top: 3px; }
+.cw-av .logo { width: 18px; height: 18px; }
+.cw-m.plan, .cw-m.sched { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--orange); border-radius: 10px; padding: 8px 12px; }
+.cw-m.plan ol { margin: 4px 0 0; }
+.cw-m.progress { color: var(--ink-2); font-size: 12.5px; padding-left: 26px; }
+.cw-m.progress::before { content: "✓"; color: var(--good); margin-right: 6px; }
+.cw-m.file { background: var(--good-soft); border-radius: 10px; padding: 7px 11px; }
+.cw-m.sched { border-left-color: var(--info); }
+.cw-ask { background: var(--warn-soft); border-radius: 10px; padding: 9px 12px; }
+.cw-ask.done .row { display: none !important; }
+.cw-dim { color: var(--muted); font-size: 12px; }
+.cw-empty { margin: auto; text-align: center; color: var(--ink-2); }
+.cw-empty .logo { margin-bottom: 6px; }
+.cw-in { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--surface); }
+.cw-input { flex: 1; border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--surface-2); color: var(--ink); font: inherit; font-size: 13px; outline: none; }
+.cw-input:focus { border-color: var(--orange); }
+.cw-send { border: 0; background: var(--orange); border-radius: 10px; width: 38px; display: grid; place-items: center; cursor: pointer; }
+.cw-send .logo { color: #fff; width: 18px; height: 18px; }

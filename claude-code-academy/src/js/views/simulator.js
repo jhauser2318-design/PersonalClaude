@@ -69,7 +69,7 @@
       fs: freshFS(), cwd: '~', inClaude: false, mode: 'default', model: 'Opus',
       trusted: new Set(), history: [], hIdx: -1, busy: false, waiter: null, awaitPlan: false,
       allowCmds: new Set(), mission: null, step: 0, cards: [], prompts: [], interrupted: false,
-      wins: {}, z: 10, br: { url: '', values: {}, checked: false }, gh: {}, allowTools: new Set(), editorTabs: [], editorActive: null, fxDir: '~/shop-app', busyCtx: false, coachTab: 'mission', termKey: null,
+      wins: {}, z: 10, br: { url: '', values: {}, checked: false }, gh: {}, cw: { folder: null, msgs: [], mode: 'Manual', wait: null }, allowTools: new Set(), editorTabs: [], editorActive: null, fxDir: '~/shop-app', busyCtx: false, coachTab: 'mission', termKey: null,
     };
   }
 
@@ -85,6 +85,7 @@
             ${icon('files', '<span class="di-img di-files">📁</span>', 'Files')}
             ${icon('editor', '<span class="di-img di-editor">{ }</span>', 'Code')}
             ${icon('docs', `<span class="di-img di-docs">${C.logo()}</span>`, 'Quick Ref')}
+            ${icon('claude', `<span class="di-img di-claude">${C.logo()}</span>`, 'Claude')}
             ${icon('browser', '<span class="di-img di-browser">🌐</span>', 'Browser')}
             ${icon('missions', '<span class="di-img di-guide">🎯</span>', 'Missions')}
           </div>
@@ -98,6 +99,7 @@
             <div class="tb-app" data-open="terminal"><span style="font:700 12px var(--mono);color:#E8916E">&gt;_</span> Terminal</div>
             <div class="tb-app" data-open="files">📁 Files</div>
             <div class="tb-app" data-open="editor"><span style="color:#8EC5F0;font-weight:700">{ }</span> Code</div>
+            <div class="tb-app" data-open="claude">${C.logo('tiny')} Claude</div>
             <div class="tb-app" data-open="browser">🌐 Browser</div>
             <div class="tb-app" data-open="docs">${C.logo('tiny')} Quick Ref</div>
             <div class="tb-clock" id="tbClock"></div>
@@ -142,6 +144,7 @@
     else if (id === 'editor') openEditor();
     else if (id === 'docs') openDocs();
     else if (id === 'browser') openBrowser();
+    else if (id === 'claude') { openClaudeApp(); stepAction('cw:open'); }
     else if (id === 'missions') { S.coachTab = 'missions'; renderCoach(); }
   }
   function toggleStart() {
@@ -151,6 +154,7 @@
       <div class="sm-item" data-sm="terminal">&gt;_ Terminal</div>
       <div class="sm-item" data-sm="files">📁 Files</div>
       <div class="sm-item" data-sm="editor">{ } Code editor</div>
+      <div class="sm-item" data-sm="claude">${C.logo('tiny')} Claude (chat & Cowork)</div>
       <div class="sm-item" data-sm="browser">🌐 Browser</div>
       <div class="sm-item" data-sm="docs">${C.logo('tiny')} Quick Reference</div>
       <div class="sm-item" data-sm="missions">🎯 Missions</div>
@@ -407,7 +411,7 @@
   }
 
   function stepMatches(step, v) {
-    if (step.key || step.action) return false;
+    if (step.key || step.action || step.app) return false;
     const s = v.trim();
     if (step.match) return step.match.test(s);
     if (step.keys) {
@@ -635,6 +639,43 @@
       permBox(esc(question), options.map(esc));
       const c = await ask(options.length > 2 ? '1-3' : '1-2');
       print(`[g]✔[/] ${esc(options[(+c || 1) - 1])}`);
+    },
+    // ---- Cowork (Claude desktop app) events
+    async 'cw-say'(text) { await sleep(350); cwPush({ who: 'claude', html: fmtMd(text) }); },
+    async 'cw-progress'(text) { await sleep(450); cwPush({ who: 'progress', html: esc(text) }); },
+    async 'cw-plan'(items) {
+      await sleep(300);
+      cwPush({ who: 'plan', html: `<b>Plan</b><ol>${items.map((i) => `<li>${esc(i)}</li>`).join('')}</ol>` });
+      return cwAsk('Approve plan', 'Change plan', 'Review the plan, then approve it to start.');
+    },
+    async 'cw-perm'(question) {
+      await sleep(300);
+      return cwAsk('Allow', 'Deny', question);
+    },
+    async 'cw-move'(pairs) {
+      for (const [file, folder] of pairs) {
+        const from = '~/Downloads/' + file, to = `~/Downloads/${folder}/${file}`;
+        if (S.fs[from]) { S.fs[to] = S.fs[from]; delete S.fs[from]; }
+        cwPush({ who: 'progress', html: `Moved <b>${esc(file)}</b> → ${esc(folder)}/` });
+        S.fxDir = '~/Downloads'; refreshFiles(to, true);
+        await sleep(220);
+      }
+    },
+    async 'cw-file'(path, content) {
+      await sleep(400);
+      S.fs[path] = { content, notes: { 1: 'Created by Cowork. Spot-check the numbers against the original receipts.' } };
+      cwPush({ who: 'file', html: `📄 Created <b>${esc(path.replace('~/Downloads/', ''))}</b>` });
+      refreshFiles(path, true);
+    },
+    async 'cw-delete'(path) {
+      await sleep(300);
+      delete S.fs[path];
+      cwPush({ who: 'progress', html: `🗑 Deleted <b>${esc(path.split('/').pop())}</b>` });
+      refreshFiles();
+    },
+    async 'cw-sched'(text) {
+      await sleep(400);
+      cwPush({ who: 'sched', html: `⏰ <b>Scheduled task created</b><br>${esc(text)}<br><span class="cw-dim">Runs in the cloud · see the Scheduled sidebar · review the first runs</span>` });
     },
     async 'cu-approved'(...args) {
       if (S.cuDenied) { print('[d](skipped: the human denied it, so Claude is told and stops here)[/]'); return; }
@@ -1125,6 +1166,87 @@
     async quit() { return SLASH.exit(); },
   };
 
+  // ------------------------------------------------------- Claude desktop app
+  const fmtMd = (t) => fmt(t);
+  function openClaudeApp() {
+    const desk = C.$('#desk').getBoundingClientRect();
+    const { body, existed } = openWin('claude', { title: 'Claude', w: 560, h: Math.min(560, desk.height - 90), x: desk.width / 2 - 250, y: 24 });
+    if (!existed || !body.querySelector('.cw')) {
+      body.innerHTML = `<div class="cw">
+        <div class="cw-head">${C.logo()}<b>Claude</b><div class="cw-tabs"><span>Chat</span><span class="on">Cowork</span></div></div>
+        <div class="cw-bar"><span class="cw-folder"></span><button class="cw-btn" data-cw-folder>📁 Connect folder</button>
+          <span class="cw-mode" data-tip="Manual: asks before actions · Auto: an automatic check stops risky actions · Skip: no automatic checks">Mode: <b>Manual</b></span></div>
+        <div class="cw-msgs"></div>
+        <div class="cw-in"><input class="cw-input" placeholder="Describe a task… (Cowork works with your connected folder)" spellcheck="false"><button class="cw-send">${C.logo()}</button></div>
+      </div>`;
+      body.querySelector('[data-cw-folder]').onclick = connectFolder;
+      const inp = body.querySelector('.cw-input');
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const v = inp.value; inp.value = ''; coworkSubmit(v); } });
+      body.querySelector('.cw-send').onclick = () => { const v = inp.value; inp.value = ''; coworkSubmit(v); };
+      body.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-cw-ans]');
+        if (b && S.cw.wait) {
+          const w = S.cw.wait; S.cw.wait = null;
+          const m = S.cw.msgs.find((x) => x.who === 'ask' && !x.answer);
+          if (m) m.answer = b.dataset.cwAns === 'yes' ? m.yes : m.no; // remembered across re-renders
+          cwRender();
+          w(b.dataset.cwAns);
+        }
+      });
+    }
+    cwRender();
+  }
+  function connectFolder() {
+    S.cw.folder = '~/Downloads';
+    cwPush({ who: 'progress', html: '📁 Connected <b>Downloads</b> (Claude can only reach this folder)' });
+    stepAction('cw:folder');
+  }
+  function cwPush(m) { S.cw.msgs.push(m); cwRender(); }
+  function cwRender() {
+    const w = S.wins.claude; if (!w) return;
+    const box = w.querySelector('.cw-msgs');
+    w.querySelector('.cw-folder').innerHTML = S.cw.folder ? `📁 <b>Downloads</b> connected` : '<span class="cw-dim">No folder connected</span>';
+    const askHTML = (m) => `<div class="cw-ask ${m.answer ? 'done' : ''}"><div>${esc(m.question)}</div>${m.answer
+      ? `<div class="cw-dim" style="margin-top:6px">You chose: <b>${esc(m.answer)}</b></div>`
+      : `<div class="row" style="gap:8px;margin-top:8px"><button class="cw-btn yes" data-cw-ans="yes" data-cw-yes>${esc(m.yes)}</button><button class="cw-btn" data-cw-ans="no">${esc(m.no)}</button></div>`}</div>`;
+    box.innerHTML = S.cw.msgs.length ? S.cw.msgs.map((m) => `<div class="cw-m ${m.who}">${m.who === 'claude' ? `<span class="cw-av">${C.logo()}</span>` : ''}<div>${m.who === 'ask' ? askHTML(m) : m.html}</div></div>`).join('')
+      : `<div class="cw-empty">${C.logo('lg')}<div>What should we get done?</div><div class="cw-dim">Connect a folder, describe the outcome, approve the plan.</div></div>`;
+    box.scrollTop = box.scrollHeight;
+  }
+  function cwAsk(yes, no, question) {
+    return new Promise((resolve) => {
+      cwPush({ who: 'ask', question, yes, no, answer: null });
+      pushCard('🙋 Cowork is asking', 'Cowork waits for you before acting (Manual mode). Click **' + yes + '** in the Claude window.', ['permission-mode']);
+      S.cw.wait = (a) => { if (a === 'yes') resolve(); else { cwPush({ who: 'claude', html: 'OK, I won\'t do that. What should I change?' }); resolve(false); } };
+    });
+  }
+  async function typeInClaudeApp(text) {
+    openClaudeApp();
+    if (S.busy || S.typing) return;
+    const inp = S.wins.claude.querySelector('.cw-input');
+    S.typing = true;
+    try { inp.value = ''; inp.focus(); for (const ch of text) { inp.value += ch; await sleep(text.length > 40 ? 12 : 30); } await sleep(200); } finally { S.typing = false; }
+    inp.value = '';
+    coworkSubmit(text);
+  }
+  async function coworkSubmit(raw) {
+    const v = String(raw || '').trim(); if (!v || S.busy) return;
+    cwPush({ who: 'you', html: esc(v) });
+    const st = currentStep();
+    const matched = st && st.app === 'cowork' && (st.match ? st.match.test(v) : (st.keys || []).every((k) => new RegExp(k, 'i').test(v)));
+    if (matched && !S.cw.folder && st.run && st.run.some((e) => /cw-(move|file|delete)/.test(e[0]))) {
+      cwPush({ who: 'claude', html: 'I need access to a folder first. Click <b>📁 Connect folder</b>.' });
+      return;
+    }
+    S.busy = true;
+    let ok = true;
+    try {
+      if (matched) ok = await runEvents(st.run);
+      else await EVENTS['cw-say']("(Simulator) In real Cowork I'd plan and do that now. For this mission, try the suggested task in the Coach panel.");
+    } finally { S.busy = false; }
+    if (matched && ok !== false) completeStep();
+  }
+
   // ------------------------------------------------------------- files app
   function openFiles(targetDir) {
     if (targetDir) S.fxDir = targetDir;
@@ -1296,6 +1418,9 @@
     const st = currentStep(); if (!st) return;
     if (st.key === 'shift+tab') { cycleMode(); return; }
     if (st.key === 'escape') { handleEscape(); return; }
+    if (st.action === 'cw:open') { openApp('claude'); return; }
+    if (st.action === 'cw:folder') { openClaudeApp(); await sleep(300); connectFolder(); return; }
+    if (st.app === 'cowork') { await typeInClaudeApp(st.type); return; }
     if (st.action) {
       const path = st.action.slice(5);
       openFiles(path.slice(0, path.lastIndexOf('/')));

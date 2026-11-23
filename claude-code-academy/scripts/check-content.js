@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 global.window = global;
-for (const f of ['glossary', 'lessons', 'exam', 'questions', 'missions', 'missions-connect', 'missions-github', 'python', 'resources', 'connect', 'github', 'kb']) {
+for (const f of ['glossary', 'lessons', 'exam', 'questions', 'missions', 'missions-connect', 'missions-github', 'missions-agents', 'python', 'resources', 'connect', 'github', 'agents-self', 'agents-managed', 'apps', 'kb']) {
   eval(fs.readFileSync(path.join(__dirname, '..', 'src', 'js', 'data', f + '.js'), 'utf8'));
 }
 const C = global.CCA;
@@ -22,7 +22,9 @@ lessons.forEach((l) => {
   l.check.forEach((q, i) => { if (!(q.a >= 0 && q.a < q.options.length)) problems.push(`lesson ${l.id} check ${i}: bad answer index`); });
 });
 C.PY_LESSONS.forEach((l) => termRefs(l.body, `python ${l.id}`));
-[...C.CONNECT, ...C.GITHUB].forEach((c) => {
+const tracks = [...C.CONNECT, ...C.GITHUB, ...C.AGENTS_INTRO, ...C.AGENTS_SELF, ...C.AGENTS_MANAGED, ...C.AGENTS_DECIDE, ...C.APPS];
+if (new Set(tracks.map((c) => c.id)).size !== tracks.length) problems.push('duplicate chapter ids across tracks');
+tracks.forEach((c) => {
   termRefs(c.body, `chapter ${c.id}`);
   c.check.forEach((q, i) => { if (!(q.a >= 0 && q.a < q.options.length)) problems.push(`connect ${c.id} check ${i}: bad answer index`); });
   if (/\[\[[^\]]*\\\|/.test(c.body)) problems.push(`connect ${c.id}: escaped pipe inside a term link`);
@@ -58,6 +60,6 @@ C.EXAM.domains.forEach((d) => {
 if (C.EXAM.domains.reduce((n, d) => n + d.weight, 0) !== 100) problems.push('domain weights do not add up to 100');
 const sys = C.buildSystemPrompt();
 
-console.log(`${C.GITHUB.length} github chapters · ${C.CONNECT.length} connect chapters · ${lessons.length} lessons · ${C.MISSIONS.length} missions · ${C.QUESTIONS.length} questions · ${Object.keys(C.GLOSSARY).length} terms · ${C.PY_LESSONS.length} Python lessons · tutor prompt ${Math.round(sys.length / 1000)}k chars`);
+console.log(`${C.AGENTS_INTRO.length + C.AGENTS_SELF.length + C.AGENTS_MANAGED.length + C.AGENTS_DECIDE.length} agents chapters · ${C.APPS.length} apps chapters · ${C.GITHUB.length} github chapters · ${C.CONNECT.length} connect chapters · ${lessons.length} lessons · ${C.MISSIONS.length} missions · ${C.QUESTIONS.length} questions · ${Object.keys(C.GLOSSARY).length} terms · ${C.PY_LESSONS.length} Python lessons · tutor prompt ${Math.round(sys.length / 1000)}k chars`);
 if (problems.length) { console.error('Problems:\n- ' + problems.join('\n- ')); process.exit(1); }
 console.log('All content checks passed.');

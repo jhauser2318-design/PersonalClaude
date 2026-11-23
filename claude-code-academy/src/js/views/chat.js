@@ -116,6 +116,9 @@
     streaming = requestId; setSending(true);
     let raf = 0;
     const history = chat.messages.filter((m) => m !== bot && m.content).map((m) => ({ role: m.role, content: m.content }));
+    // RAG: attach the most relevant in-depth chapters to the newest question only
+    const refs = C.referenceBlock(text);
+    if (refs) history[history.length - 1] = { role: 'user', content: `${refs}\n\nUsing the references above where relevant, answer:\n${text}` };
     handlers[requestId] = {
       delta: (t) => { bot.content += t; if (!raf) raf = requestAnimationFrame(() => { raf = 0; updateLast(); }); },
       done: (d) => {

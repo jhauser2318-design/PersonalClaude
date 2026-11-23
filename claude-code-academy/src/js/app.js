@@ -35,6 +35,8 @@
     C.LESSONS.forEach((m) => m.lessons.forEach((l) => out.push({ kind: 'Lesson', title: l.title, sub: m.title, text: l.title + ' ' + l.body, go: () => C.go('learn', l.id) })));
     C.MISSIONS.forEach((m) => out.push({ kind: 'Simulator', title: m.title, sub: m.sub, text: m.title + ' ' + m.sub + ' ' + m.steps.map((s) => s.do + ' ' + (s.type || '')).join(' '), go: () => C.go('simulator', m.id) }));
     C.QUESTIONS.forEach((q) => out.push({ kind: 'Question', title: q.q.slice(0, 90) + '…', sub: `${q.d} · ${q.s}`, text: q.q + ' ' + q.o.join(' '), go: () => C.go('practice', q.d) }));
+    [...(C.AGENTS_INTRO || []), ...(C.AGENTS_SELF || []), ...(C.AGENTS_MANAGED || []), ...(C.AGENTS_DECIDE || [])].forEach((c) => out.push({ kind: 'Agents', title: c.title, sub: c.group, text: c.title + ' ' + c.group + ' ' + c.body, go: () => C.go('agents', c.id) }));
+    (C.APPS || []).forEach((c) => out.push({ kind: 'Apps', title: c.title, sub: c.group, text: c.title + ' ' + c.group + ' ' + c.body, go: () => C.go('apps', c.id) }));
     (C.GITHUB || []).forEach((c) => out.push({ kind: 'GitHub', title: c.title, sub: c.group, text: c.title + ' ' + c.group + ' ' + c.body, go: () => C.go('github', c.id) }));
     (C.CONNECT || []).forEach((c) => out.push({ kind: 'Connect', title: c.title, sub: c.group, text: c.title + ' ' + c.group + ' ' + c.body, go: () => C.go('connect', c.id) }));
     C.PY_LESSONS.forEach((l) => out.push({ kind: 'Python', title: l.title, sub: 'Python Basics', text: l.title + ' ' + l.body, go: () => C.go('python', l.id) }));

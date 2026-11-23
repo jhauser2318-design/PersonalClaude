@@ -7,6 +7,39 @@ window.CCA = window.CCA || {};
 (function (C) {
   const strip = (s) => String(s || '').replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (m, k, l) => l || (C.GLOSSARY[k] ? C.GLOSSARY[k].term : k));
 
+  // Every in-depth chapter across the tracks, for the index and retrieval
+  C.allChapters = () => [
+    ...(C.CONNECT || []).map((c) => ({ ...c, track: 'Connect & Automate' })),
+    ...[...(C.AGENTS_INTRO || []), ...(C.AGENTS_SELF || []), ...(C.AGENTS_MANAGED || []), ...(C.AGENTS_DECIDE || [])].map((c) => ({ ...c, track: 'Agents: hosted vs self-hosted' })),
+    ...(C.APPS || []).map((c) => ({ ...c, track: 'Claude chat & Cowork' })),
+    ...(C.GITHUB || []).map((c) => ({ ...c, track: 'GitHub & Claude' })),
+    ...(C.LESSONS || []).flatMap((m) => m.lessons.map((l) => ({ ...l, track: 'Lessons' }))),
+    ...(C.PY_LESSONS || []).map((l) => ({ ...l, track: 'Python Basics' })),
+  ];
+
+  // Retrieval for the tutor: pick the chapters that best match a question
+  C.retrieveChapters = (question, k = 3) => {
+    const q = words(question).filter((w) => w.length > 2);
+    if (!q.length) return [];
+    const scored = C.allChapters().map((c) => {
+      const title = (c.title + ' ' + (c.group || '')).toLowerCase();
+      const body = String(c.body).toLowerCase();
+      let score = 0;
+      for (const w of q) {
+        if (title.includes(w)) score += 6;
+        const hits = body.split(w).length - 1;
+        score += Math.min(hits, 8);
+      }
+      return [score, c];
+    }).filter(([sc]) => sc >= 4).sort((a, b) => b[0] - a[0]).slice(0, k);
+    return scored.map(([, c]) => c);
+  };
+  C.referenceBlock = (question) => {
+    const found = C.retrieveChapters(question);
+    if (!found.length) return '';
+    return found.map((c) => `<reference track="${c.track}" title="${c.title}">\n${strip(c.body).slice(0, 7000)}\n</reference>`).join('\n');
+  };
+
   C.buildSystemPrompt = () => {
     const gloss = Object.values(C.GLOSSARY).map((g) => `- ${g.term}${g.domain ? ` [${g.domain}]` : ''}: ${strip(g.long || g.short)}`).join('\n');
     const domains = C.EXAM.domains.map((d) => `${d.id} ${d.name} (${d.weight}%)\n${d.tasks.map((t) => '  - ' + t).join('\n')}`).join('\n');
@@ -52,13 +85,9 @@ Simulator missions:
 ${missions}
 Python lessons: ${C.PY_LESSONS.map((l) => l.title).join(', ')}
 
-## Connect & Automate chapters (MCP, Claude API, computer & browser use)
-These were checked against the anthropic Python SDK 2.x and MCP Python SDK 2.x (Nov 2026). Prefer them over older patterns you may remember (e.g. MCP SDK 2.x uses MCPServer, not FastMCP; Opus 5.5 computer use uses computer_toolset_20260801).
-${(C.CONNECT || []).map((c) => `### ${c.title}\n${strip(c.body)}`).join('\n\n')}
-
-## GitHub & Claude chapters
-Claude-specific commands here were checked against code.claude.com docs and GitHub's MCP install guide (Nov 2026).
-${(C.GITHUB || []).map((c) => `### ${c.title}\n${strip(c.body)}`).join('\n\n')}
+## In-depth chapters (index)
+The app also has detailed chapters. For each question, the most relevant chapters are attached to the user's message inside <reference> tags; treat them as this app's verified notes (checked against current SDKs and docs, Nov 2026) and prefer them over older patterns you may remember (e.g. MCP SDK 2.x uses MCPServer, not FastMCP; Opus 5.5 computer use uses computer_toolset_20260801; Cowork and chat are merging into one Claude).
+${C.allChapters().map((c) => `- ${c.track}: ${c.title}`).join('\n')}
 Python certifications: ${C.PY_CERTS.map((c) => `${c.name} (${c.org})`).join('; ')}
 `;
   };

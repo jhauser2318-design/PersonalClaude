@@ -1364,6 +1364,7 @@
     S.fs = freshFS(m.start.files);
     if (m.start.flags) m.start.flags.forEach((f) => { S[f] = true; });
     if (m.start.fxDir) S.fxDir = m.start.fxDir;
+    if (m.start.fsOverrides) Object.entries(m.start.fsOverrides).forEach(([p, f]) => { S.fs[p] = { ...f }; });
     S.cwd = m.start.cwd || '~';
     if (m.start.inClaude) { S.inClaude = true; S.trusted.add(S.cwd); }
     openTerminal();

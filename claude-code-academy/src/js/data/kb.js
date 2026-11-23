@@ -12,6 +12,7 @@ window.CCA = window.CCA || {};
     ...(C.CONNECT || []).map((c) => ({ ...c, track: 'Connect & Automate' })),
     ...[...(C.AGENTS_INTRO || []), ...(C.AGENTS_SELF || []), ...(C.AGENTS_MANAGED || []), ...(C.AGENTS_DECIDE || [])].map((c) => ({ ...c, track: 'Agents: hosted vs self-hosted' })),
     ...(C.APPS || []).map((c) => ({ ...c, track: 'Claude chat & Cowork' })),
+    ...(C.CONTEXT || []).map((c) => ({ ...c, track: 'Context & Memory Engineering' })),
     ...(C.GITHUB || []).map((c) => ({ ...c, track: 'GitHub & Claude' })),
     ...(C.LESSONS || []).flatMap((m) => m.lessons.map((l) => ({ ...l, track: 'Lessons' }))),
     ...(C.PY_LESSONS || []).map((l) => ({ ...l, track: 'Python Basics' })),

@@ -735,3 +735,15 @@ table.t th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; 
 .cw-input:focus { border-color: var(--orange); }
 .cw-send { border: 0; background: var(--orange); border-radius: 10px; width: 38px; display: grid; place-items: center; cursor: pointer; }
 .cw-send .logo { color: #fff; width: 18px; height: 18px; }
+
+/* ---------- Context labs ---------- */
+.ctx-bar { display: flex; height: 26px; border-radius: 8px; overflow: hidden; background: var(--surface-3); margin: 10px 0 8px; }
+.ctx-bar div { min-width: 2px; }
+.ctx-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--ink-2); }
+.ctx-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.cl-block { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.cl-block.changing { border-color: var(--warn); background: var(--warn-soft); }
+.cl-name { font-weight: 600; font-size: 13px; }
+.cl-bp { margin: 4px 0; padding: 4px 10px; border-radius: 7px; background: var(--orange); color: #fff; font: 600 12px var(--mono); }
+.cl-bp-slot { margin: 3px 0; height: 14px; border-radius: 6px; font-size: 10.5px; color: transparent; cursor: pointer; text-align: center; line-height: 14px; }
+.cl-bp-slot:hover { background: var(--orange-wash); color: var(--orange-deep); }

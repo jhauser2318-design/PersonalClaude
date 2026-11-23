@@ -45,6 +45,7 @@ window.CCA = window.CCA || {};
     gitplay: {},         // Git Playground challengeId -> true
     agents: {},          // Agents track chapterId -> true
     apps: {},            // Claude apps track chapterId -> true
+    context: {},         // Context & Memory track chapterId -> true
     name: '',
   });
   let state;
@@ -91,7 +92,8 @@ window.CCA = window.CCA || {};
     const AG = C.AGENTS_INTRO ? [...C.AGENTS_INTRO, ...C.AGENTS_SELF, ...C.AGENTS_MANAGED, ...C.AGENTS_DECIDE] : [];
     const agents = Object.keys(state.agents || {}).filter((k) => AG.some((c) => c.id === k)).length / (AG.length || 1);
     const apps = Object.keys(state.apps || {}).filter((k) => (C.APPS || []).some((c) => c.id === k)).length / ((C.APPS || []).length || 1);
-    return Math.round((lessons * 0.24 + missions * 0.2 + best * 0.2 + py * 0.06 + connect * 0.08 + github * 0.08 + agents * 0.08 + apps * 0.06) * 100);
+    const ctx = Object.keys(state.context || {}).filter((k) => (C.CONTEXT || []).some((c) => c.id === k)).length / ((C.CONTEXT || []).length || 1);
+    return Math.round((lessons * 0.22 + missions * 0.18 + best * 0.2 + py * 0.05 + connect * 0.08 + github * 0.07 + agents * 0.07 + apps * 0.05 + ctx * 0.08) * 100);
   };
 
   // ------------------------------------------------------------- highlight
@@ -328,7 +330,7 @@ window.CCA = window.CCA || {};
     page.className = 'view-root';
     host.appendChild(page);
     view.render(page, arg);
-    const navArg = route === 'connect' ? navGroupFor(arg) : route === 'github' ? ghNavFor(arg) : route === 'agents' ? agNavFor(arg) : route === 'apps' ? appNavFor(arg) : null;
+    const navArg = route === 'connect' ? navGroupFor(arg) : route === 'github' ? ghNavFor(arg) : route === 'agents' ? agNavFor(arg) : route === 'apps' ? appNavFor(arg) : route === 'context' ? (['budget', 'cachelab'].includes(arg) ? arg : 'ctx-what') : null;
     C.$$('.nav-item').forEach((n) => n.classList.toggle('active', n.dataset.route === route && (!n.dataset.arg || n.dataset.arg === navArg)));
   };
   window.addEventListener('hashchange', C.render);

@@ -38,6 +38,17 @@ CCA.RESOURCES = [
     ['API status', 'https://status.claude.com/', 'Is something down?'],
     ['Pricing', 'https://claude.com/pricing', 'Plans and API prices'],
   ] },
+  { cat: 'Context & memory', icon: '🧠', items: [
+    ['Effective context engineering for AI agents', 'https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents', 'Anthropic\'s guide: attention budget, just-in-time context, compaction, notes, sub-agents'],
+    ['Contextual retrieval', 'https://www.anthropic.com/news/contextual-retrieval', 'Anthropic\'s RAG technique: contextual embeddings + BM25 + reranking'],
+    ['Prompt caching docs', 'https://platform.claude.com/docs/en/build-with-claude/prompt-caching', 'Breakpoints, TTLs, pricing, verifying hits'],
+    ['Context editing docs', 'https://platform.claude.com/docs/en/build-with-claude/context-editing', 'Clearing stale tool results and thinking'],
+    ['Memory tool docs', 'https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool', 'Client-side /memories directory'],
+    ['Token counting docs', 'https://platform.claude.com/docs/en/build-with-claude/token-counting', 'Count before you send'],
+    ['Citations docs', 'https://platform.claude.com/docs/en/build-with-claude/citations', 'Grounded answers with exact passages'],
+    ['Embeddings guide', 'https://platform.claude.com/docs/en/build-with-claude/embeddings', 'Embedding models for RAG (Anthropic recommends Voyage AI)'],
+    ['Claude Code memory docs', 'https://code.claude.com/docs/en/memory', 'CLAUDE.md hierarchy, imports, rules'],
+  ] },
   { cat: 'Claude apps & agents', icon: '🤝', items: [
     ['Claude (web app)', 'https://claude.ai/', 'Chat, Projects, Cowork, Research'],
     ['Download the Claude apps', 'https://claude.com/download', 'Desktop (Windows, macOS, Linux beta) and mobile'],
@@ -175,6 +186,14 @@ CCA.CHEATSHEET = [
     ['claude mcp list', 'List servers and health'],
     ['claude mcp remove name', 'Remove a server'],
   ] },
+  { title: 'Context & memory', rows: [
+    ['/context  ·  /compact <focus>  ·  /clear', 'See, compress, or reset the context (Claude Code)'],
+    ['.claude/rules/x.md + paths: ["**/*.test.ts"]', 'Rules that load only for matching files'],
+    ['cache_control: {"type": "ephemeral"}', 'Prompt caching (add "ttl": "1h" for 1 hour)'],
+    ['usage.cache_read_input_tokens', 'Verify cache hits'],
+    ['client.messages.count_tokens(...)', 'Count tokens before sending'],
+    ['{"type": "memory_20250818", "name": "memory"}', 'Memory tool (client-side /memories)'],
+  ] },
   { title: 'Agents & Cowork', rows: [
     ['pip install claude-agent-sdk', 'Agent SDK (Python 3.10+); npm: @anthropic-ai/claude-agent-sdk'],
     ['query(prompt=..., options=ClaudeAgentOptions(...))', 'Run a self-hosted agent and stream messages'],
@@ -262,7 +281,7 @@ CCA.NEXT = {
       ] },
     { id: 'academy', title: 'Academy roadmap', icon: '🧭', intro: 'Ideas for the next sections of this app, toward a complete "build real solutions with Claude" studio. Tell Claude which one to build next.',
       items: [
-        ['Context & memory engineering', 'How to store and feed context: CLAUDE.md strategy, @imports and rules, skills as knowledge packs, MCP resources, the memory tool and memory stores, RAG with embeddings, prompt caching, compaction. Includes a "context budget" visualizer.'],
+        ['✅ Context & memory engineering (built)', 'Now in the app under Context & Memory: 12 chapters, the Context Budget Visualizer, the Prompt Cache Lab, a Simulator mission and a runnable mini-RAG in Python Basics.'],
         ['Build & ship a full app with Claude', 'A guided capstone: spec → plan mode → build a small web app with tests → GitHub repo with CI → deploy (Pages / Vercel / a container) → monitor. Each stage graded by a checklist.'],
         ['Agent architecture studio', 'Design multi-agent systems on a canvas: coordinator, subagents, tools, hooks and escalation paths. Exports an Agent SDK skeleton and a CLAUDE.md.'],
         ['Prompt & eval lab', 'Write a prompt, run it against test cases with your API key, score the results, compare versions: the evals mindset the Architect exam expects.'],

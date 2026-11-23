@@ -280,6 +280,27 @@ That's the [[agentic-loop]] from the exam, in about 20 lines of Python.
     task: 'Add a second tool call to fake_api (e.g. get_forecast) before end_turn, and handle it in run_tool.',
     check: { q: 'In the agent loop, when do you stop?', options: ['When the reply has text', 'When stop_reason is not "tool_use"', 'After 1 turn', 'When the tool fails'], a: 1, why: 'stop_reason drives the loop: exactly what the Architect exam tests.' },
   },
+
+  {
+    id: 'py12', title: 'Mini RAG in pure Python', icon: '🔍',
+    body: `
+**Retrieval-augmented generation (RAG)** finds the most relevant pieces of a knowledge base and gives only those to Claude. Here's the core idea in about 30 lines of standard-library Python, no packages needed.
+
+## How it works
+1. **Tokenize**: split text into lowercase words.
+2. **Index**: count words in each note, and in how many notes each word appears.
+3. **Score**: words that match the question score points; **rare** words count more (that's the *IDF* idea used by search engines).
+4. **Retrieve** the top notes and build a prompt that tells Claude to answer only from them.
+
+> [!NOTE] Real systems use **embeddings** (vectors that capture meaning) and a vector database, often combined with keyword search like this one (hybrid search). See **Context & Memory → RAG from first principles**.
+
+## Try it
+Run the code, then change the question (e.g. *"How do subagents help with context?"*) and watch which notes are retrieved.
+`,
+    code: "# Mini RAG: find the most relevant notes for a question (pure Python, no libraries)\nimport math\nimport re\nfrom collections import Counter\n\nnotes = {\n    \"claude_md\": \"CLAUDE.md is project memory. Claude Code loads it at the start of every session. Put build commands, conventions and gotchas there.\",\n    \"compact\": \"Use /compact with focus instructions when the conversation gets long. Summaries can lose exact numbers, so keep key facts in a file.\",\n    \"caching\": \"Prompt caching reuses an identical prompt prefix. Put stable content first and changing content last. A timestamp in the system prompt breaks the cache.\",\n    \"subagents\": \"Subagents explore in their own context window and return a short summary, keeping the main conversation clean.\",\n    \"projects\": \"Claude chat Projects store knowledge files and instructions. Large project knowledge is retrieved as needed.\",\n}\n\ndef tokenize(text):\n    return re.findall(r\"[a-z0-9]+\", text.lower())\n\n# 1. Index: count words per note, and in how many notes each word appears\ndocs = {name: Counter(tokenize(text)) for name, text in notes.items()}\ndoc_freq = Counter(word for counts in docs.values() for word in counts)\nN = len(docs)\n\ndef score(question, counts):\n    total = 0.0\n    for word in tokenize(question):\n        if word in counts:\n            idf = math.log((N + 1) / (doc_freq[word] + 0.5))   # rare words matter more\n            total += counts[word] * idf\n    return total\n\ndef retrieve(question, k=2):\n    ranked = sorted(docs, key=lambda name: score(question, docs[name]), reverse=True)\n    return [name for name in ranked[:k] if score(question, docs[name]) > 0]\n\n# 2. Retrieve, then build the prompt you would send to Claude\nquestion = \"Why did my prompt cache stop working after I added a timestamp?\"\ntop = retrieve(question)\nprint(\"Retrieved:\", top)\n\ncontext = \"\\n\".join(f\"<doc id='{name}'>{notes[name]}</doc>\" for name in top)\nprompt = f\"{context}\\n\\nUsing only the documents above, answer: {question}\"\nprint(prompt)\n",
+    task: 'Add a new note about "skills load only their description until needed" and ask a question that should retrieve it. Then change k to 1.',
+    check: { q: 'Why do rare words get a higher score in this retriever?', options: ['They are longer', 'They distinguish one document from the others better than common words', 'Python sorts them first', 'They are always nouns'], a: 1, why: 'Common words appear everywhere and carry little signal; rare matching words point to the right document.' },
+  },
 ];
 
 CCA.PY_CERTS = [

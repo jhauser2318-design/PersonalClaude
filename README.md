@@ -2,6 +2,8 @@
 
 A personal dashboard that runs on your own computer and opens in your web browser.
 
+> **Also in this repo:** [Claude Code Academy](claude-code-academy/README.md), a desktop study app for Claude Code and the Claude Certified Architect exam (simulator, lessons, practice tests, AI tutor, Python basics).
+
 **Phase 1 (this version): Goals & Tasks.**
 
 - Four life areas, each with its own color: **Work**, **Health**, **Social**, **Education**.

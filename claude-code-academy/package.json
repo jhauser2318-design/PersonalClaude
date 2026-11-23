@@ -1,0 +1,40 @@
+{
+  "name": "claude-code-academy",
+  "productName": "Claude Code Academy",
+  "version": "1.0.0",
+  "description": "A desktop study app for Claude Code and the Claude Certified Architect exam, with a hands-on Claude Code simulator, an AI tutor, and Python basics.",
+  "main": "main.js",
+  "author": "PersonalClaude",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:linux": "electron-builder --linux --publish never",
+    "check": "node scripts/check-content.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0"
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.personalclaude.claudecodeacademy",
+    "productName": "Claude Code Academy",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["main.js", "preload.js", "src/**/*", "build/icon.png", "package.json"],
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "build/icon.png" },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Claude Code Academy"
+    },
+    "mac": { "target": "dmg", "icon": "build/icon.png", "category": "public.app-category.education" },
+    "linux": { "target": "AppImage", "icon": "build/icon.png", "category": "Education" }
+  }
+}
